@@ -42,6 +42,28 @@ const step1Cookies = (getRes.headers.getSetCookie?.() ?? [])
   .map(c => c.split(';')[0].trim()).join('; ');
 console.log(`Captured cookies: ${step1Cookies || '(none)'}`);
 
+// --- Smart cookie parser (matches client.ts parseSetCookies) ---
+function parseClean(headers) {
+  const raw = headers.getSetCookie?.() ?? [];
+  const jar = new Map();
+  let xsrf = '';
+  for (const entry of raw) {
+    if (/Max-Age=0/i.test(entry)) continue; // skip deletions
+    const nv = entry.split(';')[0].trim();
+    const eq = nv.indexOf('=');
+    if (eq < 1) continue;
+    const name = nv.substring(0, eq);
+    const value = nv.substring(eq + 1);
+    if (!value) continue; // skip empty values
+    jar.set(name, value);
+    if (name === 'XSRF-TOKEN') xsrf = value;
+  }
+  return {
+    cookieHeader: [...jar.entries()].map(([k,v]) => `${k}=${v}`).join('; '),
+    xsrf,
+  };
+}
+
 // Step 2: POST to verify.jsp (without pre-login cookies)
 console.log('\n=== Step 2a: POST verify.jsp (NO pre-login cookies) ===');
 const verifyUrl = `${BASE_URL}/campus/verify.jsp?nonBrowser=true&username=${encodeURIComponent(USERNAME)}&password=${encodeURIComponent(PASSWORD)}&appName=${encodeURIComponent(DISTRICT)}&portalLoginPage=parents`;
@@ -74,8 +96,11 @@ const post2Cookies = (postRes2.headers.getSetCookie?.() ?? [])
   .map(c => c.split(';')[0].trim()).join('; ');
 console.log(`Captured cookies: ${post2Cookies || '(none)'}`);
 
-// Step 3: Try data requests with each cookie set
-const dataUrl = `${BASE_URL}/campus/api/portal/students`;
+// Step 3: Try data requests with CLEANED cookies (matching client.ts logic)
+const clean2a = parseClean(postRes1.headers);
+console.log(`\n=== Cleaned 2a cookies: ${clean2a.cookieHeader}`);
+console.log(`=== XSRF token: ${clean2a.xsrf}`);
+
 const endpoints = [
   '/campus/api/portal/students',
   '/campus/resources/portal/grades',
@@ -84,34 +109,17 @@ const endpoints = [
 
 for (const ep of endpoints) {
   const url = `${BASE_URL}${ep}`;
-
-  // Try with step 2a cookies (no pre-login)
-  if (post1Cookies) {
-    console.log(`\n=== GET ${ep} (cookies from 2a: no pre-login) ===`);
-    const r = await fetch(url, { headers: { Cookie: post1Cookies, Accept: 'application/json' } });
-    console.log(`Status: ${r.status}`);
-    const t = await r.text();
-    console.log(`Body (first 300 chars): ${t.substring(0, 300)}`);
-  }
-
-  // Try with step 2b cookies (with pre-login)
-  if (post2Cookies) {
-    console.log(`\n=== GET ${ep} (cookies from 2b: with pre-login) ===`);
-    const r = await fetch(url, { headers: { Cookie: post2Cookies, Accept: 'application/json' } });
-    console.log(`Status: ${r.status}`);
-    const t = await r.text();
-    console.log(`Body (first 300 chars): ${t.substring(0, 300)}`);
-  }
-
-  // Try with combined cookies (step 1 + step 2b)
-  const combined = [step1Cookies, post2Cookies].filter(Boolean).join('; ');
-  if (combined && combined !== post2Cookies) {
-    console.log(`\n=== GET ${ep} (combined cookies: step1 + step2b) ===`);
-    const r = await fetch(url, { headers: { Cookie: combined, Accept: 'application/json' } });
-    console.log(`Status: ${r.status}`);
-    const t = await r.text();
-    console.log(`Body (first 300 chars): ${t.substring(0, 300)}`);
-  }
+  console.log(`\n=== GET ${ep} (cleaned cookies + XSRF header) ===`);
+  const r = await fetch(url, {
+    headers: {
+      Cookie: clean2a.cookieHeader,
+      Accept: 'application/json',
+      ...(clean2a.xsrf ? { 'X-XSRF-TOKEN': clean2a.xsrf } : {}),
+    },
+  });
+  console.log(`Status: ${r.status}`);
+  const t = await r.text();
+  console.log(`Body (first 500 chars): ${t.substring(0, 500)}`);
 }
 
 console.log('\n=== Done ===');
