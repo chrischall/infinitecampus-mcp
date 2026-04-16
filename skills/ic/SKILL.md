@@ -7,7 +7,8 @@ description: This skill should be used when the user asks about Infinite Campus 
 
 MCP server for Infinite Campus (Campus Parent portal) — read student schedules, grades, assignments, attendance, behavior, food service, documents, and portal messages across one or more districts.
 
-- **Source:** `github.com/<owner>/infinitecampus-mcp` (placeholder — package not yet published)
+- **Source:** [github.com/chrischall/infinitecampus-mcp](https://github.com/chrischall/infinitecampus-mcp)
+- **npm:** [npmjs.com/package/infinitecampus-mcp](https://www.npmjs.com/package/infinitecampus-mcp)
 
 ## Setup
 

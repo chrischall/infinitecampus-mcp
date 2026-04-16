@@ -3,7 +3,25 @@
   "version": "0.1.0",
   "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrischall/infinitecampus-mcp.git"
+  },
   "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "ai",
+    "infinite-campus",
+    "campus-parent",
+    "school",
+    "education",
+    "k12",
+    "grades",
+    "attendance",
+    "assignments"
+  ],
   "type": "module",
   "bin": {
     "infinitecampus-mcp": "dist/index.js"
