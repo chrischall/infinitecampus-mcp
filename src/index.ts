@@ -19,6 +19,7 @@ import { registerStudentTools } from './tools/students.js';
 import { registerScheduleTools } from './tools/schedule.js';
 import { registerAssignmentTools } from './tools/assignments.js';
 import { registerGradeTools } from './tools/grades.js';
+import { registerAttendanceTools } from './tools/attendance.js';
 
 const accounts = loadAccounts();
 const client = new ICClient(accounts);
@@ -29,6 +30,7 @@ registerStudentTools(server, client);
 registerScheduleTools(server, client);
 registerAssignmentTools(server, client);
 registerGradeTools(server, client);
+registerAttendanceTools(server, client);
 
 console.error(`[infinitecampus-mcp] Loaded ${accounts.length} district(s): ${accounts.map((a) => a.name).join(', ')}`);
 console.error('[infinitecampus-mcp] Developed and maintained by AI (Claude). Use at your own discretion.');
