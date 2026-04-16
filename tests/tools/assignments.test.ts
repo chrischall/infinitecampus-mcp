@@ -25,8 +25,10 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('ic_list_assignments', () => {
   const raw = [
-    { id: 1, courseName: 'Math', title: 'HW1', missing: false, scored: true, points: 10 },
-    { id: 2, courseName: 'Sci', title: 'Lab', missing: true, scored: false, points: null },
+    { assignmentName: 'HW1', courseName: 'Math',  sectionID: 1, dueDate: '2026-01-15T04:59:00.000Z', missing: false },
+    { assignmentName: 'Lab', courseName: 'Sci',   sectionID: 2, dueDate: '2026-03-20T04:59:00.000Z', missing: true  },
+    { assignmentName: 'Essay', courseName: 'Eng', sectionID: 3, dueDate: '2026-04-10T04:59:00.000Z', missing: false },
+    { assignmentName: 'NoDate', courseName: 'Eng', sectionID: 3, missing: false },
   ];
 
   it('returns all assignments by default', async () => {
@@ -35,24 +37,77 @@ describe('ic_list_assignments', () => {
     expect(JSON.parse(result.content[0].text)).toEqual(raw);
   });
 
-  it('filters to missingOnly when requested', async () => {
+  it('calls the listView endpoint with personID', async () => {
+    const client = setup([]);
+    await handlers.get('ic_list_assignments')!({ district: 'anoka', studentId: '12345' });
+    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(url).toContain('/assignment/listView');
+    expect(url).toContain('personID=12345');
+  });
+
+  it('passes sectionID server-side when courseId provided', async () => {
+    const client = setup([]);
+    await handlers.get('ic_list_assignments')!({ district: 'anoka', studentId: '12345', courseId: '40171' });
+    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(url).toContain('sectionID=40171');
+  });
+
+  it('does NOT pass startDate/endDate to the URL (endpoint ignores them)', async () => {
+    const client = setup([]);
+    await handlers.get('ic_list_assignments')!({
+      district: 'anoka', studentId: '12345', since: '2026-03-01', until: '2026-04-15',
+    });
+    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(url).not.toContain('startDate');
+    expect(url).not.toContain('endDate');
+  });
+
+  it('filters client-side by since (dueDate >= since)', async () => {
+    setup(raw);
+    const result = await handlers.get('ic_list_assignments')!({
+      district: 'anoka', studentId: '12345', since: '2026-03-01',
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.map((a: { assignmentName: string }) => a.assignmentName)).toEqual(['Lab', 'Essay']);
+  });
+
+  it('filters client-side by until (dueDate <= until, inclusive on YYYY-MM-DD)', async () => {
+    setup(raw);
+    const result = await handlers.get('ic_list_assignments')!({
+      district: 'anoka', studentId: '12345', until: '2026-03-20',
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.map((a: { assignmentName: string }) => a.assignmentName)).toEqual(['HW1', 'Lab']);
+  });
+
+  it('combines since, until, and missingOnly filters', async () => {
+    setup(raw);
+    const result = await handlers.get('ic_list_assignments')!({
+      district: 'anoka', studentId: '12345',
+      since: '2026-01-01', until: '2026-04-30', missingOnly: true,
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toHaveLength(1);
+    expect(data[0].assignmentName).toBe('Lab');
+  });
+
+  it('missingOnly filter', async () => {
     setup(raw);
     const result = await handlers.get('ic_list_assignments')!({
       district: 'anoka', studentId: '12345', missingOnly: true,
     });
     const data = JSON.parse(result.content[0].text);
     expect(data).toHaveLength(1);
-    expect(data[0].id).toBe(2);
+    expect(data[0].assignmentName).toBe('Lab');
   });
 
-  it('passes courseId, since, until through to the request URL', async () => {
-    const client = setup([]);
-    await handlers.get('ic_list_assignments')!({
-      district: 'anoka', studentId: '12345', courseId: 'C1', since: '2026-03-01', until: '2026-04-15',
+  it('excludes assignments with no dueDate when filtering by date', async () => {
+    setup(raw);
+    const result = await handlers.get('ic_list_assignments')!({
+      district: 'anoka', studentId: '12345', since: '2020-01-01',
     });
-    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
-    expect(url).toContain('C1');
-    expect(url).toContain('2026-03-01');
-    expect(url).toContain('2026-04-15');
+    const data = JSON.parse(result.content[0].text);
+    // The NoDate assignment is excluded because filter requires dueDate string
+    expect(data.map((a: { assignmentName: string }) => a.assignmentName)).toEqual(['HW1', 'Lab', 'Essay']);
   });
 });
