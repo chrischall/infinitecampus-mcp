@@ -174,4 +174,55 @@ describe('ic_list_assessments', () => {
     });
     await expect(handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' })).rejects.toThrow('IC 500');
   });
+
+  it('arrayifies a single stateTest returned as a bare object (prism XML→JSON quirk)', async () => {
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.includes('calendarID=50')) return Promise.resolve({
+        stateTests: { name: 'EOC Math', score: '85' }, // bare object, not an array
+        nationalTests: [],
+        districtTests: { tests: [], typeTests: [] },
+      });
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data[0].stateTests).toEqual([{ name: 'EOC Math', score: '85' }]);
+  });
+
+  it('returns empty array when nationalTests is missing entirely', async () => {
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.includes('calendarID=50')) return Promise.resolve({
+        stateTests: [{ n: 'A' }],
+        // nationalTests omitted
+        districtTests: { tests: [], typeTests: [] },
+      });
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data[0].nationalTests).toEqual([]);
+  });
+
+  it('arrayifies districtTests.tests as a bare object while typeTests stays an array', async () => {
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.includes('calendarID=50')) return Promise.resolve({
+        stateTests: [],
+        nationalTests: [],
+        districtTests: {
+          tests: { name: 'BM1' }, // bare object
+          typeTests: [{ type: 'Benchmark' }], // array
+        },
+      });
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data[0].districtTests).toEqual({
+      tests: [{ name: 'BM1' }],
+      typeTests: [{ type: 'Benchmark' }],
+    });
+  });
 });

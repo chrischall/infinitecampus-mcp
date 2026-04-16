@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled } from './_shared.js';
+import { textContent, is404, featureDisabled, toArray } from './_shared.js';
 
 interface RawDocument {
   name?: string;
@@ -40,11 +40,11 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
     try {
-      const raw = await client.request<RawDocument[]>(
+      const raw = await client.request<RawDocument | RawDocument[] | null>(
         args.district,
         `/campus/resources/portal/report/all?personID=${encodeURIComponent(args.studentId)}`,
       );
-      const trimmed: TrimmedDocument[] = (raw ?? []).map((d) => {
+      const trimmed: TrimmedDocument[] = toArray(raw).map((d) => {
         const out: TrimmedDocument = {};
         if (d.name !== undefined) out.name = d.name;
         if (d.type !== undefined) out.type = d.type;

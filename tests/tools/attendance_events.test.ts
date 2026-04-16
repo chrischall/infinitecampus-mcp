@@ -327,4 +327,25 @@ describe('ic_list_attendance_events', () => {
     registerAttendanceEventsTools(server, client);
     await expect(handlers.get('ic_list_attendance_events')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow();
   });
+
+  it('arrayifies bare-object events and sectionPlacements (prism XML→JSON quirk)', async () => {
+    const bare = {
+      calendarID: 5592,
+      enrollmentID: 12398,
+      events: {
+        attendanceID: 9154, localDate: '2025-11-13', code: '1L', excuse: 'E',
+        sectionPlacements: FULL_SP, // bare object, not array
+      },
+    };
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.startsWith('/campus/resources/portal/attendance/events')) return Promise.resolve(bare);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_attendance_events')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toHaveLength(1);
+    expect(data[0].events).toHaveLength(1);
+    expect(data[0].events[0].sectionPlacements).toEqual([TRIMMED_SP]);
+  });
 });

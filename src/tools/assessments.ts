@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, findStudent, studentNotFound, featureDisabled, is404 } from './_shared.js';
+import { textContent, findStudent, studentNotFound, featureDisabled, is404, toArray } from './_shared.js';
 
 // Test item shapes vary by district and test type — we pass them through unchanged.
 type AnyTest = Record<string, unknown>;
@@ -9,9 +9,9 @@ type AnyTest = Record<string, unknown>;
 interface RawAssessmentResponse {
   personID?: number;
   assessmentHTML?: string | null;
-  stateTests?: AnyTest[] | null;
-  nationalTests?: AnyTest[] | null;
-  districtTests?: { tests?: AnyTest[] | null; typeTests?: AnyTest[] | null } | null;
+  stateTests?: AnyTest | AnyTest[] | null;
+  nationalTests?: AnyTest | AnyTest[] | null;
+  districtTests?: { tests?: AnyTest | AnyTest[] | null; typeTests?: AnyTest | AnyTest[] | null } | null;
 }
 
 interface AssessmentsByEnrollment {
@@ -54,11 +54,11 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
           enrollmentID: enr.enrollmentID,
           calendarID: enr.calendarID,
           calendarName: enr.calendarName,
-          stateTests: raw.stateTests ?? [],
-          nationalTests: raw.nationalTests ?? [],
+          stateTests: toArray(raw.stateTests),
+          nationalTests: toArray(raw.nationalTests),
           districtTests: {
-            tests: raw.districtTests?.tests ?? [],
-            typeTests: raw.districtTests?.typeTests ?? [],
+            tests: toArray(raw.districtTests?.tests),
+            typeTests: toArray(raw.districtTests?.typeTests),
           },
         });
       } catch (e) {

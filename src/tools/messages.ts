@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent } from './_shared.js';
+import { textContent, toArray } from './_shared.js';
 
 const listArgs = z.object({
   district: z.string(),
@@ -143,30 +143,28 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
       args.district,
       `/campus/prism?x=notifications.Notification-retrieve&limitCount=${limit}`,
     ).then((raw) => {
-      const rawItems = raw?.data?.NotificationList?.Notification;
-      // Coerce to array — prism returns a bare object when there's exactly one notification
-      const items: PrismNotification[] = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
+      const items = toArray(raw?.data?.NotificationList?.Notification);
       const trimmed = items.map((n) => pick(n, NOTIFICATION_KEEP));
       return { count: trimmed.length, items: trimmed };
     }).catch((e) => {
       return { count: 0, items: [], error: e instanceof Error ? e.message : String(e) };
     });
 
-    const inboxPromise = client.request<InboxMessage[] | null>(
+    const inboxPromise = client.request<InboxMessage | InboxMessage[] | null>(
       args.district,
       '/campus/api/portal/process-message',
     ).then((raw) => {
-      const items = (raw ?? []).map((m) => pick(m, INBOX_KEEP));
+      const items = toArray(raw).map((m) => pick(m, INBOX_KEEP));
       return { count: items.length, items };
     }).catch((e) => {
       return { count: 0, items: [], error: e instanceof Error ? e.message : String(e) };
     });
 
-    const noticePromise = client.request<unknown[] | null>(
+    const noticePromise = client.request<unknown | unknown[] | null>(
       args.district,
       '/campus/resources/portal/userNotice',
     ).then((raw) => {
-      const items = raw ?? [];
+      const items = toArray(raw);
       return { count: items.length, items };
     }).catch((e) => {
       return { count: 0, items: [], error: e instanceof Error ? e.message : String(e) };

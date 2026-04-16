@@ -138,6 +138,24 @@ describe('ic_list_teachers', () => {
     await expect(handlers.get('ic_list_teachers')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow('IC 500');
   });
 
+  it('arrayifies a single teacher or counselor returned as a bare object (prism XML→JSON quirk)', async () => {
+    setup((path) => {
+      if (path.startsWith('/campus/resources/portal/section/contacts')) {
+        return Promise.resolve({ sectionID: 501, firstName: 'Solo', lastName: 'Teach', email: 's@x.org' });
+      }
+      if (path.startsWith('/campus/resources/portal/studentCounselor/byUser')) {
+        return Promise.resolve({ firstName: 'Solo', lastName: 'Couns', email: 'c@x.org', title: 'Counselor' });
+      }
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_teachers')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.teachers).toHaveLength(1);
+    expect(data.teachers[0]).toMatchObject({ sectionID: 501, firstName: 'Solo', email: 's@x.org' });
+    expect(data.counselors).toHaveLength(1);
+    expect(data.counselors[0]).toMatchObject({ firstName: 'Solo', title: 'Counselor' });
+  });
+
   it('drops undefined fields and preserves unknown fields via passthrough', async () => {
     const raw = [{
       sectionID: 1, firstName: 'X',

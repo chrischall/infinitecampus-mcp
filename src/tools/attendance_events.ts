@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, findStudent, studentNotFound } from './_shared.js';
+import { textContent, is404, featureDisabled, findStudent, studentNotFound, toArray } from './_shared.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -30,7 +30,7 @@ interface RawEvent {
   periodID?: number;
   modifiedDate?: string;
   wholeDayAbsence?: boolean;
-  sectionPlacements?: RawSectionPlacement[];
+  sectionPlacements?: RawSectionPlacement | RawSectionPlacement[];
   [key: string]: unknown;
 }
 
@@ -42,7 +42,7 @@ interface RawEnrollmentEvents {
   schoolName?: string;
   crossSiteEnrollment?: boolean;
   endDate?: string;
-  events?: RawEvent[];
+  events?: RawEvent | RawEvent[];
   [key: string]: unknown;
 }
 
@@ -109,8 +109,8 @@ function trimEvent(e: RawEvent): TrimmedEvent {
     const v = e[key];
     if (v !== undefined) out[key] = v;
   }
-  if (Array.isArray(e.sectionPlacements)) {
-    out.sectionPlacements = e.sectionPlacements.map(trimSectionPlacement);
+  if (e.sectionPlacements !== undefined) {
+    out.sectionPlacements = toArray(e.sectionPlacements).map(trimSectionPlacement);
   }
   return out;
 }
@@ -135,14 +135,14 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
           args.district,
           `/campus/resources/portal/attendance/events?enrollmentID=${enr.enrollmentID}&personID=${encodeURIComponent(args.studentId)}`,
         );
-        const entries = Array.isArray(raw) ? raw : [raw];
+        const entries = toArray(raw);
         for (const entry of entries) {
           const trimmed: TrimmedEnrollmentEvents = { events: [] };
           for (const key of ENROLLMENT_KEYS) {
             const v = entry[key];
             if (v !== undefined) trimmed[key] = v;
           }
-          const events = (entry.events ?? []).filter((e) => {
+          const events = toArray(entry.events).filter((e) => {
             const d = typeof e.localDate === 'string' ? e.localDate.substring(0, 10) : undefined;
             if (args.since && (d === undefined || d < args.since)) return false;
             if (args.until && (d === undefined || d > args.until)) return false;

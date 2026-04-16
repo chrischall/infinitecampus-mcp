@@ -6,6 +6,7 @@ import {
   featureDisabled,
   findStudent,
   studentNotFound,
+  toArray,
   type RawStudent,
 } from '../../src/tools/_shared.js';
 
@@ -123,5 +124,36 @@ describe('_shared.studentNotFound', () => {
     const result = studentNotFound('42');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toEqual({ error: 'StudentNotFound', studentId: '42' });
+  });
+});
+
+describe('_shared.toArray', () => {
+  it('returns empty array for undefined', () => {
+    expect(toArray(undefined)).toEqual([]);
+  });
+
+  it('returns empty array for null', () => {
+    expect(toArray(null)).toEqual([]);
+  });
+
+  it('returns the same array when already an empty array', () => {
+    expect(toArray([])).toEqual([]);
+  });
+
+  it('passes through an already-array value', () => {
+    const input = [{ a: 1 }];
+    expect(toArray(input)).toEqual([{ a: 1 }]);
+  });
+
+  it('wraps a single object in a 1-element array', () => {
+    expect(toArray({ a: 1 })).toEqual([{ a: 1 }]);
+  });
+
+  it('wraps a falsy primitive (0) as [0] — does not treat as missing', () => {
+    expect(toArray(0)).toEqual([0]);
+  });
+
+  it('wraps an empty string as [\'\'] — does not treat as missing', () => {
+    expect(toArray('')).toEqual(['']);
   });
 });

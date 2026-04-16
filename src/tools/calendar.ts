@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, findStudent, studentNotFound } from './_shared.js';
+import { textContent, findStudent, studentNotFound, toArray } from './_shared.js';
 
 interface RawTerm {
   termID: number;
@@ -64,10 +64,12 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
 
     // 2. For each enrollment, fetch terms + instructional days
     for (const enr of student.enrollments ?? []) {
-      const [terms, days] = await Promise.all([
-        client.request<RawTerm[]>(args.district, `/campus/resources/term?structureID=${enr.structureID}`),
-        client.request<RawInstructionalDay[]>(args.district, `/campus/resources/calendar/instructionalDay?calendarID=${enr.calendarID}`),
+      const [termsRaw, daysRaw] = await Promise.all([
+        client.request<RawTerm | RawTerm[]>(args.district, `/campus/resources/term?structureID=${enr.structureID}`),
+        client.request<RawInstructionalDay | RawInstructionalDay[]>(args.district, `/campus/resources/calendar/instructionalDay?calendarID=${enr.calendarID}`),
       ]);
+      const terms = toArray(termsRaw);
+      const days = toArray(daysRaw);
 
       // 3. Filter days by since/until range
       const filteredDays = days.filter((d) => {

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, findStudent, studentNotFound } from './_shared.js';
+import { textContent, is404, featureDisabled, findStudent, studentNotFound, toArray } from './_shared.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -18,25 +18,25 @@ interface TrimmedSectionPlacement {
 
 interface AttendanceEntry {
   date: string;
-  sectionPlacements?: RawSectionPlacement[] | TrimmedSectionPlacement[];
+  sectionPlacements?: RawSectionPlacement | RawSectionPlacement[] | TrimmedSectionPlacement | TrimmedSectionPlacement[];
   [key: string]: unknown;
 }
 
 interface RawCourse {
-  absentList?: AttendanceEntry[];
-  tardyList?: AttendanceEntry[];
-  presentList?: AttendanceEntry[];
-  earlyReleaseList?: AttendanceEntry[];
+  absentList?: AttendanceEntry | AttendanceEntry[];
+  tardyList?: AttendanceEntry | AttendanceEntry[];
+  presentList?: AttendanceEntry | AttendanceEntry[];
+  earlyReleaseList?: AttendanceEntry | AttendanceEntry[];
   [key: string]: unknown;
 }
 
 interface RawTerm {
-  courses?: RawCourse[];
+  courses?: RawCourse | RawCourse[];
   [key: string]: unknown;
 }
 
 interface RawAttendanceEnrollment {
-  terms?: RawTerm[];
+  terms?: RawTerm | RawTerm[];
   [key: string]: unknown;
 }
 
@@ -64,14 +64,14 @@ function trimSectionPlacement(sp: RawSectionPlacement | TrimmedSectionPlacement)
 }
 
 function trimEntry(e: AttendanceEntry): AttendanceEntry {
-  if (!Array.isArray(e.sectionPlacements)) return e;
-  const sps: (RawSectionPlacement | TrimmedSectionPlacement)[] = e.sectionPlacements;
+  if (e.sectionPlacements === undefined) return e;
+  const sps = toArray<RawSectionPlacement | TrimmedSectionPlacement>(e.sectionPlacements);
   return { ...e, sectionPlacements: sps.map(trimSectionPlacement) };
 }
 
-function processList(list: AttendanceEntry[] | undefined, since?: string, until?: string): AttendanceEntry[] | undefined {
-  if (!list) return list;
-  return list.filter((e) => inRange(e.date, since, until)).map(trimEntry);
+function processList(list: AttendanceEntry | AttendanceEntry[] | undefined, since?: string, until?: string): AttendanceEntry[] | undefined {
+  if (list === undefined) return list;
+  return toArray(list).filter((e) => inRange(e.date, since, until)).map(trimEntry);
 }
 
 export function registerAttendanceTools(server: McpServer, client: ICClient): void {
@@ -94,11 +94,11 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
           args.district,
           `/campus/resources/portal/attendance/${enr.enrollmentID}?courseSummary=true&personID=${encodeURIComponent(args.studentId)}`,
         );
-        const entries = Array.isArray(data) ? data : [data];
+        const entries = toArray(data);
         for (const entry of entries) {
-          const trimmedTerms = (entry.terms ?? []).map((t) => ({
+          const trimmedTerms = toArray(entry.terms).map((t) => ({
             ...t,
-            courses: (t.courses ?? []).map((c) => ({
+            courses: toArray(t.courses).map((c) => ({
               ...c,
               absentList: processList(c.absentList, args.since, args.until),
               tardyList: processList(c.tardyList, args.since, args.until),

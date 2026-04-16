@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404 } from './_shared.js';
+import { textContent, is404, toArray } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -57,7 +57,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
     const args = argsSchema.parse(rawArgs);
     const personID = encodeURIComponent(args.studentId);
 
-    const teachersPromise = client.request<TeacherContact[] | null>(
+    const teachersPromise = client.request<TeacherContact | TeacherContact[] | null>(
       args.district,
       `/campus/resources/portal/section/contacts?personID=${personID}`,
     ).catch((e) => {
@@ -65,7 +65,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
       throw e;
     });
 
-    const counselorsPromise = client.request<CounselorContact[] | null>(
+    const counselorsPromise = client.request<CounselorContact | CounselorContact[] | null>(
       args.district,
       `/campus/resources/portal/studentCounselor/byUser?personID=${personID}`,
     ).catch((e) => {
@@ -75,8 +75,8 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
 
     const [teachersRaw, counselorsRaw] = await Promise.all([teachersPromise, counselorsPromise]);
 
-    const teachers = (teachersRaw ?? []).map((t) => trimRecord(t));
-    const counselors = (counselorsRaw ?? []).map((c) => trimRecord(c));
+    const teachers = toArray(teachersRaw).map((t) => trimRecord(t));
+    const counselors = toArray(counselorsRaw).map((c) => trimRecord(c));
 
     return textContent({ counselors, teachers });
   });

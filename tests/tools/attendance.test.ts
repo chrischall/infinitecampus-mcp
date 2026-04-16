@@ -311,4 +311,45 @@ describe('ic_list_attendance', () => {
     registerAttendanceTools(server, client);
     await expect(handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow();
   });
+
+  it('arrayifies bare-object terms/courses/lists/sectionPlacements (prism XML→JSON quirk)', async () => {
+    // Every nested collection comes through as a single bare object
+    const bareObj = {
+      enrollmentID: 99001,
+      terms: {
+        termID: 1,
+        termName: 'Q1',
+        courses: {
+          courseName: 'Math',
+          absentList: {
+            date: '2026-01-15',
+            code: 'A',
+            description: 'Absent',
+            sectionPlacements: FULL_SP, // single SP as bare object
+          },
+          tardyList: {
+            date: '2026-02-20',
+            code: 'T',
+            description: 'Tardy',
+            sectionPlacements: [FULL_SP],
+          },
+        },
+      },
+    };
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.startsWith('/campus/resources/portal/attendance/99001')) return Promise.resolve(bareObj);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toHaveLength(1);
+    expect(data[0].terms).toHaveLength(1);
+    expect(data[0].terms[0].courses).toHaveLength(1);
+    const course = data[0].terms[0].courses[0];
+    expect(course.absentList).toHaveLength(1);
+    expect(course.absentList[0].sectionPlacements).toEqual([TRIMMED_SP]);
+    expect(course.tardyList).toHaveLength(1);
+    expect(course.tardyList[0].sectionPlacements).toEqual([TRIMMED_SP]);
+  });
 });

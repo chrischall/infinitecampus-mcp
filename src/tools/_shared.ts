@@ -46,3 +46,13 @@ export async function findStudent(
 export function studentNotFound(studentId: string) {
   return textContent({ error: 'StudentNotFound', studentId });
 }
+
+/**
+ * Coerce a value to an array. Defensive against IC's prism XML→JSON
+ * serializer which returns a bare object (not a 1-element array) for
+ * collections that contain exactly one item. Also handles null/undefined.
+ */
+export function toArray<T>(value: T | T[] | null | undefined): T[] {
+  if (value === null || value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
