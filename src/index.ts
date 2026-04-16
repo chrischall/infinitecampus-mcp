@@ -26,6 +26,7 @@ import { registerBehaviorTools } from './tools/behavior.js';
 import { registerFoodServiceTools } from './tools/foodservice.js';
 import { registerMessageTools } from './tools/messages.js';
 import { registerDocumentTools } from './tools/documents.js';
+import { registerCalendarTools } from './tools/calendar.js';
 
 const account = loadAccount();
 const client = new ICClient(account);
@@ -41,6 +42,7 @@ registerBehaviorTools(server, client);
 registerFoodServiceTools(server, client);
 registerMessageTools(server, client);
 registerDocumentTools(server, client);
+registerCalendarTools(server, client);
 
 console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
 console.error('[infinitecampus-mcp] Developed and maintained by AI (Claude). Use at your own discretion.');
