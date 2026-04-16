@@ -21,21 +21,58 @@ function setup(client: ICClient) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('ic_list_documents', () => {
-  it('returns document metadata array', async () => {
+  it('calls /campus/resources/portal/report/all and trims response', async () => {
     const client = new ICClient(account);
     vi.spyOn(client, 'request').mockResolvedValue([
-      { id: 'd1', type: 'reportCard', date: '2026-03-15', downloadUrl: '/x.pdf' },
+      {
+        name: 'Student Schedule',
+        type: 'studentSchedule',
+        url: '/campus/schedule.pdf',
+        moduleLabel: 'Schedule',
+        endYear: 2026,
+        structureID: 3917,
+        _model: 'report',
+      },
+    ]);
+    setup(client);
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
+    expect(client.request).toHaveBeenCalledWith('anoka', '/campus/resources/portal/report/all?personID=12345');
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      {
+        name: 'Student Schedule',
+        type: 'studentSchedule',
+        url: '/campus/schedule.pdf',
+        moduleLabel: 'Schedule',
+        endYear: 2026,
+      },
+    ]);
+  });
+
+  it('omits fields that are not present on the raw doc', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue([
+      { name: 'X', url: '/x.pdf' }, // missing type/moduleLabel/endYear
+      { type: 'reportCard' }, // missing name/url/moduleLabel/endYear
     ]);
     setup(client);
     const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
     expect(JSON.parse(result.content[0].text)).toEqual([
-      { id: 'd1', type: 'reportCard', date: '2026-03-15', downloadUrl: '/x.pdf' },
+      { name: 'X', url: '/x.pdf' },
+      { type: 'reportCard' },
     ]);
+  });
+
+  it('handles null response from endpoint', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue(null);
+    setup(client);
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
+    expect(JSON.parse(result.content[0].text)).toEqual([]);
   });
 
   it('returns FeatureDisabled on 404', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 404 Not Found for /campus/resources/portal/documents?personID=123'));
+    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 404 Not Found for /campus/resources/portal/report/all?personID=123'));
     setup(client);
     const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '123' });
     const data = JSON.parse(result.content[0].text);
