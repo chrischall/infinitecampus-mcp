@@ -15,7 +15,9 @@ export function registerGradeTools(server: McpServer, client: ICClient): void {
     inputSchema: argsSchema.shape,
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
-    const data = await client.request(args.district, '/campus/resources/portal/grades');
+    const params = new URLSearchParams({ personID: args.studentId });
+    if (args.termId) params.set('termID', args.termId);
+    const data = await client.request(args.district, `/campus/resources/portal/grades?${params}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }

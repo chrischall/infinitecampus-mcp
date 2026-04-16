@@ -37,4 +37,30 @@ describe('ic_list_attendance', () => {
     const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
     expect(JSON.parse(result.content[0].text)).toEqual([{ date: '2026-04-01', status: 'absent' }]);
   });
+
+  it('returns FeatureDisabled warning on 404', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'request').mockImplementation(async () => { throw new Error('IC 404 Not Found for /x'); });
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerAttendanceTools(server, client);
+    const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toMatchObject({ warning: 'FeatureDisabled', feature: 'attendance', district: 'anoka', data: [] });
+  });
+
+  it('rethrows non-404 errors', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'request').mockImplementation(async () => { throw new Error('IC 500'); });
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerAttendanceTools(server, client);
+    await expect(handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow();
+  });
 });

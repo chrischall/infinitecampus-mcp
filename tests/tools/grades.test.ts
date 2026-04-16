@@ -24,18 +24,19 @@ function setup(returnValue: unknown) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('ic_list_grades', () => {
-  it('calls the grades endpoint', async () => {
+  it('calls grades endpoint with personID', async () => {
     const raw = [{ courseName: 'Math', grade: 'A-', percent: 91 }];
     const client = setup(raw);
     const result = await handlers.get('ic_list_grades')!({ district: 'anoka', studentId: '12345' });
-    expect(client.request).toHaveBeenCalledWith('anoka', '/campus/resources/portal/grades');
+    expect(client.request).toHaveBeenCalledWith('anoka', expect.stringContaining('personID=12345'));
     expect(JSON.parse(result.content[0].text)).toEqual(raw);
   });
 
-  it('does not pass studentId or termId in URL (endpoint returns all grades)', async () => {
+  it('passes termId when provided', async () => {
     const client = setup([]);
     await handlers.get('ic_list_grades')!({ district: 'anoka', studentId: '12345', termId: 'T3' });
     const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
-    expect(url).toBe('/campus/resources/portal/grades');
+    expect(url).toContain('personID=12345');
+    expect(url).toContain('termID=T3');
   });
 });
