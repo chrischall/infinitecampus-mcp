@@ -45,3 +45,13 @@ describe('ic_get_message', () => {
     expect(client.request).toHaveBeenCalledWith('anoka', expect.stringContaining('/abc'));
   });
 });
+
+describe('ic_list_message_recipients', () => {
+  it('returns teachers + counselors for a student', async () => {
+    const raw = [{ recipientId: 'T1', name: 'Mrs. Smith', role: 'teacher' }];
+    const client = setup(raw);
+    const result = await handlers.get('ic_list_message_recipients')!({ district: 'anoka', studentId: '12345' });
+    expect(client.request).toHaveBeenCalledWith('anoka', expect.stringContaining('12345'));
+    expect(JSON.parse(result.content[0].text)).toEqual(raw);
+  });
+});

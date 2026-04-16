@@ -14,6 +14,11 @@ const getArgs = z.object({
   messageId: z.string(),
 });
 
+const recipientsArgs = z.object({
+  district: z.string(),
+  studentId: z.string(),
+});
+
 export function registerMessageTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_messages', {
     description: 'List portal inbox or sent messages (district announcements, teacher notes).',
@@ -36,6 +41,16 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
   }, async (rawArgs) => {
     const args = getArgs.parse(rawArgs);
     const data = await client.request(args.district, `/campus/api/portal/parents/messages/${encodeURIComponent(args.messageId)}`);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.registerTool('ic_list_message_recipients', {
+    description: "List people the parent can message about this student (teachers + counselors). IDs returned here are the only valid recipientIds for ic_send_message.",
+    annotations: { readOnlyHint: true },
+    inputSchema: recipientsArgs.shape,
+  }, async (rawArgs) => {
+    const args = recipientsArgs.parse(rawArgs);
+    const data = await client.request(args.district, `/campus/api/portal/parents/messageRecipients?personID=${encodeURIComponent(args.studentId)}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }
