@@ -55,3 +55,47 @@ describe('ic_list_message_recipients', () => {
     expect(JSON.parse(result.content[0].text)).toEqual(raw);
   });
 });
+
+describe('ic_send_message', () => {
+  it('validates recipient IDs against ic_list_message_recipients before POST', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'request')
+      .mockResolvedValueOnce([{ recipientId: 'T1', name: 'Mrs. Smith' }])
+      .mockResolvedValueOnce({ ok: true });
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((n: string, _c, cb) => {
+      handlers.set(n, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_send_message')!({
+      district: 'anoka', studentId: '12345',
+      recipientIds: ['T1'], subject: 'Q', body: 'B',
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toMatchObject({ ok: true });
+    const secondCall = (client.request as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(secondCall[1]).toContain('/messages');
+    expect(secondCall[2]).toMatchObject({ method: 'POST' });
+  });
+
+  it('returns InvalidRecipient error when ID not in recipients list', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'request').mockResolvedValueOnce([{ recipientId: 'T1', name: 'Mrs. Smith' }]);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((n: string, _c, cb) => {
+      handlers.set(n, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_send_message')!({
+      district: 'anoka', studentId: '12345',
+      recipientIds: ['BAD'], subject: 'Q', body: 'B',
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toMatchObject({ error: 'InvalidRecipient', invalidIds: ['BAD'], validIds: ['T1'] });
+    expect((client.request as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+});

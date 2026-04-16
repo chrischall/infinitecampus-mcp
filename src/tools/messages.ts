@@ -19,6 +19,14 @@ const recipientsArgs = z.object({
   studentId: z.string(),
 });
 
+const sendArgs = z.object({
+  district: z.string(),
+  studentId: z.string().describe('Student personID; used to validate recipient IDs'),
+  recipientIds: z.array(z.string()).min(1),
+  subject: z.string().min(1),
+  body: z.string().min(1),
+});
+
 export function registerMessageTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_messages', {
     description: 'List portal inbox or sent messages (district announcements, teacher notes).',
@@ -51,6 +59,36 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
   }, async (rawArgs) => {
     const args = recipientsArgs.parse(rawArgs);
     const data = await client.request(args.district, `/campus/api/portal/parents/messageRecipients?personID=${encodeURIComponent(args.studentId)}`);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.registerTool('ic_send_message', {
+    description: 'Send a portal message to a teacher/counselor about a student. recipientIds MUST come from ic_list_message_recipients for that student.',
+    annotations: { destructiveHint: true },
+    inputSchema: sendArgs.shape,
+  }, async (rawArgs) => {
+    const args = sendArgs.parse(rawArgs);
+    const valid = await client.request<Array<{ recipientId: string }>>(
+      args.district,
+      `/campus/api/portal/parents/messageRecipients?personID=${encodeURIComponent(args.studentId)}`,
+    );
+    const validIds = valid.map((v) => v.recipientId);
+    const invalidIds = args.recipientIds.filter((id) => !validIds.includes(id));
+    if (invalidIds.length > 0) {
+      const err = { error: 'InvalidRecipient', invalidIds, validIds };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(err, null, 2) }] };
+    }
+
+    const data = await client.request(args.district, '/campus/api/portal/parents/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipientIds: args.recipientIds,
+        subject: args.subject,
+        body: args.body,
+        personID: args.studentId,
+      }),
+    });
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }
