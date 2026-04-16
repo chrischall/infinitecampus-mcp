@@ -280,6 +280,96 @@ describe('ICClient.request — error paths', () => {
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
+  it('omits X-XSRF-TOKEN header when login returns no XSRF-TOKEN cookie', async () => {
+    // Covers the false branch of the xsrfToken ternary on lines 102 and 125.
+    // Login sets JSESSIONID but no XSRF-TOKEN → xsrfToken stays ''.
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=abc123; Path=/' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(accounts);
+    await client.request('anoka', '/campus/api/test');
+
+    // Verify the data request (2nd fetch call) does NOT have X-XSRF-TOKEN
+    const dataCall = fetchSpy.mock.calls[1];
+    const dataHeaders = (dataCall[1] as RequestInit).headers as Record<string, string>;
+    expect(dataHeaders).not.toHaveProperty('X-XSRF-TOKEN');
+  });
+
+  it('omits X-XSRF-TOKEN header on download when login returns no XSRF-TOKEN cookie', async () => {
+    // Covers the false branch of the xsrfToken ternary on line 102 (download path).
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=abc123; Path=/' },
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), {
+        status: 200, headers: { 'content-type': 'application/pdf' },
+      }));
+
+    const { mkdtemp, rm } = await import('fs/promises');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const tmpDir = await mkdtemp(join(tmpdir(), 'ic-xsrf-'));
+    try {
+      const client = new ICClient(accounts);
+      await client.download('anoka', '/campus/doc', join(tmpDir, 'test.pdf'));
+
+      // Verify the download request (2nd fetch call) does NOT have X-XSRF-TOKEN
+      const dlCall = fetchSpy.mock.calls[1];
+      const dlHeaders = (dlCall[1] as RequestInit).headers as Record<string, string>;
+      expect(dlHeaders).not.toHaveProperty('X-XSRF-TOKEN');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('parseSetCookies filters Max-Age=0, malformed, empty-value cookies and extracts XSRF-TOKEN', async () => {
+    // Covers lines 164, 168, 174, 177 in parseSetCookies.
+    // Use the fallback path (getSetCookie = undefined) with a comma-separated
+    // set-cookie header containing all the edge cases.
+    const cookieHeader = [
+      'deleted=old; Path=/; Max-Age=0',   // Max-Age=0 → filtered (line 164)
+      '=noname; Path=/',                   // eqIdx=0 → malformed (line 168)
+      'emptyval=; Path=/',                 // empty value → filtered (line 174)
+      'JSESSIONID=sess123; Path=/',        // normal cookie kept
+      'XSRF-TOKEN=xsrf-abc; Path=/',      // XSRF extraction (line 177)
+    ].join(', ');
+
+    const loginRes = new Response('', {
+      status: 200,
+      headers: { 'set-cookie': cookieHeader },
+    });
+    // Force the fallback path so comma-splitting is used
+    (loginRes.headers as any).getSetCookie = undefined;
+
+    fetchSpy
+      .mockResolvedValueOnce(loginRes)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(accounts);
+    const result = await client.request('anoka', '/campus/api/test');
+    expect(result).toEqual({ ok: true });
+
+    // Verify the data request includes X-XSRF-TOKEN (proving extraction worked)
+    const dataCall = fetchSpy.mock.calls[1];
+    const dataHeaders = (dataCall[1] as RequestInit).headers as Record<string, string>;
+    expect(dataHeaders['X-XSRF-TOKEN']).toBe('xsrf-abc');
+
+    // Verify the Cookie header has JSESSIONID and XSRF-TOKEN but NOT deleted/emptyval
+    expect(dataHeaders['Cookie']).toContain('JSESSIONID=sess123');
+    expect(dataHeaders['Cookie']).toContain('XSRF-TOKEN=xsrf-abc');
+    expect(dataHeaders['Cookie']).not.toContain('deleted');
+    expect(dataHeaders['Cookie']).not.toContain('emptyval');
+  });
+
   it('parseSetCookies falls back to get("set-cookie") when getSetCookie is unavailable', async () => {
     // Covers the fallback branch in parseSetCookies when getSetCookie
     // is not present on the headers object (optional chaining + comma fallback).
@@ -334,6 +424,35 @@ describe('ICClient.download', () => {
     await fsWriteFile(dest, 'hi');
     const client = new ICClient(accounts);
     await expect(client.download('anoka', '/x', dest)).rejects.toThrow(/FileExists/);
+  });
+
+  it('sends X-XSRF-TOKEN header on download when login returns XSRF-TOKEN cookie', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const loginRes = new Response('', {
+      status: 200,
+      headers: { 'set-cookie': 'JSESSIONID=b; Path=/' },
+    });
+    // Force fallback path to inject XSRF-TOKEN via comma-separated header
+    (loginRes.headers as any).getSetCookie = undefined;
+    Object.defineProperty(loginRes.headers, 'get', {
+      value: (name: string) => {
+        if (name === 'set-cookie') return 'JSESSIONID=b; Path=/, XSRF-TOKEN=tok123; Path=/';
+        return null;
+      },
+    });
+    fetchSpy
+      .mockResolvedValueOnce(loginRes)
+      .mockResolvedValueOnce(new Response(new Uint8Array([7, 8]), {
+        status: 200, headers: { 'content-type': 'application/pdf' },
+      }));
+    const dest = join(dir, 'xsrf.pdf');
+    const client = new ICClient(accounts);
+    const meta = await client.download('anoka', '/x', dest);
+    expect(meta.bytes).toBe(2);
+    // Verify the download fetch included X-XSRF-TOKEN
+    const dlCall = fetchSpy.mock.calls[1];
+    const dlHeaders = (dlCall[1] as RequestInit).headers as Record<string, string>;
+    expect(dlHeaders['X-XSRF-TOKEN']).toBe('tok123');
   });
 
   it('overwrites when overwrite:true', async () => {
