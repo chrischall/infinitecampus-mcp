@@ -4,6 +4,7 @@ import type { Account } from './config.js';
 
 interface Session {
   cookie: string;          // serialized "name=value; name2=value2" header
+  xsrfToken: string;       // XSRF-TOKEN value for X-XSRF-TOKEN request header
   loggedInAt: number;
   loginInFlight: Promise<void> | null;
 }
@@ -41,7 +42,7 @@ export class ICClient {
     if (s?.loginInFlight) { await s.loginInFlight; return; }
 
     if (!s) {
-      s = { cookie: '', loggedInAt: 0, loginInFlight: null };
+      s = { cookie: '', xsrfToken: '', loggedInAt: 0, loginInFlight: null };
       this.sessions.set(account.name, s);
     }
     s.loginInFlight = this.login(account);
@@ -49,31 +50,31 @@ export class ICClient {
   }
 
   private async login(account: Account): Promise<void> {
-    // Step A: GET login form to capture initial JSESSIONID
-    const initRes = await fetch(
-      `${account.baseUrl}/campus/portal/parents/${account.district}.jsp`,
-      { redirect: 'manual' },
-    );
-    const initCookie = parseSetCookie(initRes.headers.get('set-cookie'));
-
-    // Step B: POST credentials to verify endpoint
+    // ic_parent_api's pattern: single POST to verify.jsp, let the response
+    // set cookies. No pre-login GET needed (unlike OFW's Spring Security).
     const postRes = await fetch(
       `${account.baseUrl}/campus/verify.jsp?nonBrowser=true&username=${encodeURIComponent(account.username)}&password=${encodeURIComponent(account.password)}&appName=${encodeURIComponent(account.district)}&portalLoginPage=parents`,
-      {
-        method: 'POST',
-        headers: initCookie ? { Cookie: initCookie } : {},
-        redirect: 'manual',
-      },
+      { method: 'POST' },
     );
 
     if (postRes.status >= 500) throw new PortalUnreachableError(account.name, postRes.status);
-    const postCookie = parseSetCookie(postRes.headers.get('set-cookie')) || initCookie;
-    if (!postCookie || postRes.status >= 400) throw new AuthFailedError(account.name);
+
+    // Check for login failure — IC returns 200 with "password-error" in the
+    // body on bad credentials, not a 4xx status code.
+    const body = await postRes.text();
+    if (postRes.status >= 400 || body.includes('password-error')) {
+      throw new AuthFailedError(account.name);
+    }
+
+    // Capture cookies, deduplicating and filtering out deletions (Max-Age=0).
+    const cookies = parseSetCookies(postRes.headers);
+    if (!cookies.cookieHeader) throw new AuthFailedError(account.name);
 
     // Mutate the in-map session in place so concurrent callers'
     // references stay live (see ensureSession).
     const session = this.sessions.get(account.name)!;
-    session.cookie = postCookie;
+    session.cookie = cookies.cookieHeader;
+    session.xsrfToken = cookies.xsrfToken;
     session.loggedInAt = Date.now();
   }
 
@@ -95,7 +96,12 @@ export class ICClient {
     await this.ensureSession(account);
     const session = this.sessions.get(account.name)!;
 
-    const res = await fetch(`${account.baseUrl}${path}`, { headers: { Cookie: session.cookie } });
+    const res = await fetch(`${account.baseUrl}${path}`, {
+      headers: {
+        Cookie: session.cookie,
+        ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
+      },
+    });
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
@@ -113,7 +119,12 @@ export class ICClient {
     const session = this.sessions.get(account.name)!;
     const res = await fetch(`${account.baseUrl}${path}`, {
       method: opts.method ?? 'GET',
-      headers: { Cookie: session.cookie, Accept: 'application/json', ...(opts.headers ?? {}) },
+      headers: {
+        Cookie: session.cookie,
+        Accept: 'application/json',
+        ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
+        ...(opts.headers ?? {}),
+      },
       body: opts.body,
     });
 
@@ -131,10 +142,48 @@ export class ICClient {
   }
 }
 
-function parseSetCookie(header: string | null): string {
-  if (!header) return '';
-  // Take first cookie's name=value, drop attributes
-  return header.split(',').map((c) => c.split(';')[0].trim()).join('; ');
+/**
+ * Parse Set-Cookie headers into a deduplicated cookie string + XSRF token.
+ *
+ * IC's login response sets ~20 cookies including deletion markers (Max-Age=0).
+ * Sending both `appName=` (delete) and `appName=springfield` (set) causes IC to
+ * reject requests with "conflicting app name values". This parser:
+ * - Filters out cookies with Max-Age=0 (deletion markers)
+ * - Deduplicates by name (last value wins)
+ * - Extracts XSRF-TOKEN separately for the X-XSRF-TOKEN request header
+ */
+function parseSetCookies(headers: Headers): { cookieHeader: string; xsrfToken: string } {
+  const raw = headers.getSetCookie?.() ?? [];
+  const headerStrings = raw.length > 0 ? raw : splitFallback(headers.get('set-cookie'));
+
+  const jar = new Map<string, string>();
+  let xsrfToken = '';
+
+  for (const entry of headerStrings) {
+    // Check for Max-Age=0 → this is a cookie deletion, skip it
+    if (/Max-Age=0/i.test(entry)) continue;
+
+    const nameValue = entry.split(';')[0].trim();
+    const eqIdx = nameValue.indexOf('=');
+    if (eqIdx < 1) continue;
+
+    const name = nameValue.substring(0, eqIdx);
+    const value = nameValue.substring(eqIdx + 1);
+
+    // Skip cookies with empty values (clearing instructions)
+    if (!value) continue;
+
+    jar.set(name, value);
+    if (name === 'XSRF-TOKEN') xsrfToken = value;
+  }
+
+  const cookieHeader = [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+  return { cookieHeader, xsrfToken };
+}
+
+function splitFallback(header: string | null): string[] {
+  if (!header) return [];
+  return header.split(',').map((s) => s.trim());
 }
 
 export class UnknownDistrictError extends Error {
