@@ -9,6 +9,15 @@ interface Session {
   loginInFlight: Promise<void> | null;
 }
 
+interface LinkedAccount {
+  districtName: string;
+  clientId: string;
+  districtLoginUrl: string;
+  appName: string;
+  userId: number;
+  state: string;
+}
+
 const SESSION_TTL_MS = 5 * 60 * 60 * 1000; // 5h, slightly under IC's typical 6h
 
 export interface RequestOpts {
@@ -20,13 +29,18 @@ export interface RequestOpts {
 export class ICClient {
   private accounts = new Map<string, Account>();
   private sessions = new Map<string, Session>();
+  private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
 
   constructor(accounts: Account[]) {
     for (const a of accounts) this.accounts.set(a.name, a);
   }
 
-  listDistricts(): { name: string; baseUrl: string }[] {
-    return [...this.accounts.values()].map((a) => ({ name: a.name, baseUrl: a.baseUrl }));
+  listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
+    return [...this.accounts.values()].map((a) => ({
+      name: a.name,
+      baseUrl: a.baseUrl,
+      linked: this.linkedTo.has(a.name),
+    }));
   }
 
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {
@@ -76,6 +90,107 @@ export class ICClient {
     session.cookie = cookies.cookieHeader;
     session.xsrfToken = cookies.xsrfToken;
     session.loggedInAt = Date.now();
+
+    // Discover linked districts (CUPS SSO) — non-blocking, errors logged not thrown
+    if (!this.linkedTo.has(account.name)) {
+      await this.discoverLinkedDistricts(account);
+    }
+  }
+
+  private async discoverLinkedDistricts(account: Account): Promise<void> {
+    try {
+      const session = this.sessions.get(account.name)!;
+      const baseHeaders = {
+        Cookie: session.cookie,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Referer: `${account.baseUrl}/campus/nav-wrapper/`,
+        Origin: account.baseUrl,
+        ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
+      };
+
+      // 1. Get linked accounts
+      const laRes = await fetch(
+        `${account.baseUrl}/campus/api/campus/authentication/cups/linkedAccounts`,
+        { headers: baseHeaders },
+      );
+      if (!laRes.ok) return; // silently skip if endpoint doesn't exist
+      const laData = await laRes.json() as { accounts: LinkedAccount[] };
+      if (!laData.accounts?.length) return;
+
+      // 2. Get original district info (needed for all linked accounts)
+      const [origRes, currRes] = await Promise.all([
+        fetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
+        fetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
+      ]);
+      if (!origRes.ok || !currRes.ok) return;
+      const origData = await origRes.json() as { clientID: string };
+      const currData = await currRes.json() as { name: string };
+
+      // 3. For each linked account, get CUPS token and authenticate
+      for (const linked of laData.accounts) {
+        try {
+          // Get CUPS login token
+          const tokenRes = await fetch(
+            `${account.baseUrl}/campus/api/campus/authentication/cups/loginToken`,
+            {
+              method: 'POST',
+              headers: baseHeaders,
+              body: JSON.stringify({ dstClientId: linked.clientId, dstUserId: linked.userId }),
+            },
+          );
+          if (!tokenRes.ok) { console.error(`[ic] CUPS loginToken failed for ${linked.districtName}`); continue; }
+          const tokenData = await tokenRes.json() as { token: { token: string } };
+
+          // Extract base URL from districtLoginUrl
+          const linkedBaseUrl = new URL(linked.districtLoginUrl).origin;
+
+          // POST to linked district's verify.jsp with CUPS token
+          const switchRes = await fetch(
+            `${linked.districtLoginUrl}?nonBrowser=true&appName=${encodeURIComponent(linked.appName)}&portalLoginPage=parents`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                cupsToken: tokenData.token.token,
+                originalDistrictClientID: origData.clientID,
+                previousDistrictName: currData.name,
+                loggedIntoCampusParent: 'true',
+              }).toString(),
+            },
+          );
+
+          const body = await switchRes.text();
+          if (!body.includes('success')) { console.error(`[ic] CUPS switch to ${linked.districtName} failed: ${body.substring(0, 100)}`); continue; }
+
+          const switchCookies = parseSetCookies(switchRes.headers);
+          if (!switchCookies.cookieHeader) { console.error(`[ic] CUPS switch to ${linked.districtName}: no cookies`); continue; }
+
+          // Store synthetic account + session
+          const syntheticAccount: Account = {
+            name: linked.districtName,
+            baseUrl: linkedBaseUrl,
+            district: linked.appName,
+            username: '(linked)',
+            password: '(linked)',
+          };
+          this.accounts.set(linked.districtName, syntheticAccount);
+          this.sessions.set(linked.districtName, {
+            cookie: switchCookies.cookieHeader,
+            xsrfToken: switchCookies.xsrfToken,
+            loggedInAt: Date.now(),
+            loginInFlight: null,
+          });
+          this.linkedTo.set(linked.districtName, account.name);
+          console.error(`[ic] Linked district discovered: ${linked.districtName} (${linked.appName})`);
+        } catch (e) {
+          console.error(`[ic] CUPS flow failed for ${linked.districtName}: ${e instanceof Error ? e.message : e}`);
+        }
+      }
+    } catch (e) {
+      // Don't fail primary login on linked-district errors
+      console.error(`[ic] Linked district discovery failed: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   async download(
@@ -131,7 +246,19 @@ export class ICClient {
     if (res.status === 401) {
       if (isRetry) throw new SessionExpiredError(account.name);
       this.sessions.delete(account.name);
-      await this.ensureSession(account);
+
+      const primaryName = this.linkedTo.get(account.name);
+      if (primaryName) {
+        // Linked district 401: invalidate primary so re-login discovers linked districts again
+        this.sessions.delete(primaryName);
+        for (const [linked, primary] of this.linkedTo) {
+          if (primary === primaryName) this.sessions.delete(linked);
+        }
+        const primaryAccount = this.accounts.get(primaryName)!;
+        await this.ensureSession(primaryAccount);
+      } else {
+        await this.ensureSession(account);
+      }
       return this.doRequest<T>(account, path, opts, true);
     }
     if (res.status >= 500) throw new PortalUnreachableError(account.name, res.status);

@@ -32,8 +32,8 @@ describe('ic_list_districts', () => {
     const result = await handlers.get('ic_list_districts')!({});
     const data = JSON.parse(result.content[0].text);
     expect(data).toEqual([
-      { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org' },
-      { name: 'mpls', baseUrl: 'https://mpls.infinitecampus.org' },
+      { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', linked: false },
+      { name: 'mpls', baseUrl: 'https://mpls.infinitecampus.org', linked: false },
     ]);
   });
 });
