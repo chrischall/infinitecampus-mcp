@@ -58,7 +58,7 @@ export class ICClient {
 
     // Step B: POST credentials to verify endpoint
     const postRes = await fetch(
-      `${account.baseUrl}/campus/verify.jsp?nonBrowser=true&username=${encodeURIComponent(account.username)}&password=${encodeURIComponent(account.password)}&appName=${encodeURIComponent(account.district)}`,
+      `${account.baseUrl}/campus/verify.jsp?nonBrowser=true&username=${encodeURIComponent(account.username)}&password=${encodeURIComponent(account.password)}&appName=${encodeURIComponent(account.district)}&portalLoginPage=parents`,
       {
         method: 'POST',
         headers: initCookie ? { Cookie: initCookie } : {},

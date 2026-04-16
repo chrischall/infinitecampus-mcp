@@ -20,7 +20,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
     if (args.since) params.set('startDate', args.since);
     if (args.until) params.set('endDate', args.until);
     try {
-      const data = await client.request(args.district, `/campus/api/portal/parents/foodService?${params}`);
+      const data = await client.request(args.district, `/campus/resources/portal/foodService?${params}`);
       return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('IC 404 ')) {

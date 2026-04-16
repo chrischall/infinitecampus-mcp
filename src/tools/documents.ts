@@ -21,7 +21,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
     inputSchema: listArgs.shape,
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
-    const data = await client.request(args.district, `/campus/api/portal/parents/documents?personID=${encodeURIComponent(args.studentId)}`);
+    const data = await client.request(args.district, `/campus/resources/portal/documents?personID=${encodeURIComponent(args.studentId)}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 

@@ -13,7 +13,7 @@ export function registerStudentTools(server: McpServer, client: ICClient): void 
     inputSchema: argsSchema.shape,
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
-    const data = await client.request(args.district, '/campus/api/portal/parents/students');
+    const data = await client.request(args.district, '/campus/api/portal/students');
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }

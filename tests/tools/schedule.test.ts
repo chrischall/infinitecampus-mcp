@@ -24,7 +24,7 @@ function setup(returnValue: unknown) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('ic_get_schedule', () => {
-  it('calls schedule endpoint with studentId', async () => {
+  it('calls roster endpoint with studentId', async () => {
     const raw = [{ period: 1, course: 'Math', room: '203' }];
     const client = setup(raw);
     const result = await handlers.get('ic_get_schedule')!({ district: 'anoka', studentId: '12345' });
@@ -32,16 +32,19 @@ describe('ic_get_schedule', () => {
     expect(JSON.parse(result.content[0].text)).toEqual(raw);
   });
 
-  it('passes date arg through when provided', async () => {
+  it('uses /campus/resources/portal/roster path', async () => {
     const client = setup([]);
-    await handlers.get('ic_get_schedule')!({ district: 'anoka', studentId: '12345', date: '2026-04-15' });
-    expect(client.request).toHaveBeenCalledWith('anoka', expect.stringContaining('2026-04-15'));
+    await handlers.get('ic_get_schedule')!({ district: 'anoka', studentId: '12345' });
+    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(url).toContain('/campus/resources/portal/roster');
   });
 
-  it('passes termFilter when provided', async () => {
+  it('only passes personID in the URL (date and termFilter kept in schema but not sent)', async () => {
     const client = setup([]);
-    await handlers.get('ic_get_schedule')!({ district: 'anoka', studentId: '12345', termFilter: 'T2' });
+    await handlers.get('ic_get_schedule')!({ district: 'anoka', studentId: '12345', date: '2026-04-15', termFilter: 'T2' });
     const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
-    expect(url).toContain('T2');
+    expect(url).toContain('personID=12345');
+    expect(url).not.toContain('2026-04-15');
+    expect(url).not.toContain('T2');
   });
 });

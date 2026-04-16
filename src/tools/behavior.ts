@@ -20,7 +20,7 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
     if (args.since) params.set('startDate', args.since);
     if (args.until) params.set('endDate', args.until);
     try {
-      const data = await client.request(args.district, `/campus/api/portal/parents/behavior?${params}`);
+      const data = await client.request(args.district, `/campus/resources/portal/behavior?${params}`);
       return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('IC 404 ')) {

@@ -19,7 +19,7 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
     const params = new URLSearchParams({ personID: args.studentId });
     if (args.since) params.set('startDate', args.since);
     if (args.until) params.set('endDate', args.until);
-    const data = await client.request(args.district, `/campus/api/portal/parents/attendance?${params}`);
+    const data = await client.request(args.district, `/campus/resources/portal/attendance?${params}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }

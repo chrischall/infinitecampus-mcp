@@ -38,7 +38,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     const params = new URLSearchParams({
       folder, page: String(args.page ?? 1), size: String(args.size ?? 50),
     });
-    const data = await client.request(args.district, `/campus/api/portal/parents/messages?${params}`);
+    const data = await client.request(args.district, `/campus/resources/portal/messages?${params}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 
@@ -48,7 +48,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     inputSchema: getArgs.shape,
   }, async (rawArgs) => {
     const args = getArgs.parse(rawArgs);
-    const data = await client.request(args.district, `/campus/api/portal/parents/messages/${encodeURIComponent(args.messageId)}`);
+    const data = await client.request(args.district, `/campus/resources/portal/messages/${encodeURIComponent(args.messageId)}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 
@@ -58,7 +58,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     inputSchema: recipientsArgs.shape,
   }, async (rawArgs) => {
     const args = recipientsArgs.parse(rawArgs);
-    const data = await client.request(args.district, `/campus/api/portal/parents/messageRecipients?personID=${encodeURIComponent(args.studentId)}`);
+    const data = await client.request(args.district, `/campus/resources/portal/messageRecipients?personID=${encodeURIComponent(args.studentId)}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 
@@ -70,7 +70,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     const args = sendArgs.parse(rawArgs);
     const valid = await client.request<Array<{ recipientId: string }>>(
       args.district,
-      `/campus/api/portal/parents/messageRecipients?personID=${encodeURIComponent(args.studentId)}`,
+      `/campus/resources/portal/messageRecipients?personID=${encodeURIComponent(args.studentId)}`,
     );
     const validIds = valid.map((v) => v.recipientId);
     const invalidIds = args.recipientIds.filter((id) => !validIds.includes(id));
@@ -79,7 +79,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
       return { content: [{ type: 'text' as const, text: JSON.stringify(err, null, 2) }] };
     }
 
-    const data = await client.request(args.district, '/campus/api/portal/parents/messages', {
+    const data = await client.request(args.district, '/campus/resources/portal/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

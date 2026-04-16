@@ -16,10 +16,8 @@ export function registerScheduleTools(server: McpServer, client: ICClient): void
     inputSchema: argsSchema.shape,
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
-    const date = args.date ?? new Date().toISOString().slice(0, 10);
-    const params = new URLSearchParams({ personID: args.studentId, date });
-    if (args.termFilter) params.set('term', args.termFilter);
-    const data = await client.request(args.district, `/campus/api/portal/parents/schedule?${params}`);
+    const params = new URLSearchParams({ personID: args.studentId });
+    const data = await client.request(args.district, `/campus/resources/portal/roster?${params}`);
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });
 }

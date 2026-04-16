@@ -33,7 +33,7 @@ export function registerAssignmentTools(server: McpServer, client: ICClient): vo
     if (args.since) params.set('startDate', args.since);
     if (args.until) params.set('endDate', args.until);
     const raw = await client.request<RawAssignment[]>(
-      args.district, `/campus/api/portal/parents/assignments?${params}`,
+      args.district, `/campus/api/portal/assignment/listView?${params}`,
     );
     const data = args.missingOnly ? raw.filter((a) => a.missing) : raw;
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
