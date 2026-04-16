@@ -35,7 +35,7 @@ import { registerFeeTools } from './tools/fees.js';
 
 const account = loadAccount();
 const client = new ICClient(account);
-const server = new McpServer({ name: 'infinitecampus', version: '0.1.3' });
+const server = new McpServer({ name: 'infinitecampus', version: '2.0.0' });
 
 registerDistrictTools(server, client);
 registerStudentTools(server, client);
