@@ -23,7 +23,7 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
       const data = await client.request(args.district, `/campus/api/portal/parents/behavior?${params}`);
       return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
     } catch (e) {
-      if (e instanceof Error && /\b404\b/.test(e.message)) {
+      if (e instanceof Error && e.message.startsWith('IC 404 ')) {
         const warn = { warning: 'FeatureDisabled', feature: 'behavior', district: args.district, data: [] };
         return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
       }

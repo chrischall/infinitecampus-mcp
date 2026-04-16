@@ -23,7 +23,7 @@ function readSlot(env: NodeJS.ProcessEnv | Record<string, string | undefined>, n
 
 export function loadAccounts(env = process.env): Account[] {
   const accounts: Account[] = [];
-  const seenNames = new Set<string>();
+  const seenNames = new Map<string, number>();
 
   for (let n = 1; n < 1000; n++) {
     const { any, fields } = readSlot(env, n);
@@ -37,12 +37,13 @@ export function loadAccounts(env = process.env): Account[] {
       );
     }
 
-    if (seenNames.has(fields.NAME!)) {
+    const firstSeenAt = seenNames.get(fields.NAME!);
+    if (firstSeenAt !== undefined) {
       throw new Error(
-        `Duplicate district name '${fields.NAME}' in IC_${n}. Names must be unique.`,
+        `Duplicate district name '${fields.NAME}' in IC_${firstSeenAt} and IC_${n}. Names must be unique.`,
       );
     }
-    seenNames.add(fields.NAME!);
+    seenNames.set(fields.NAME!, n);
 
     if (!/^https:\/\//.test(fields.BASE_URL!)) {
       throw new Error(`IC_${n}_BASE_URL is not a valid https URL: '${fields.BASE_URL}'`);

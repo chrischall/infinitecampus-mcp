@@ -60,7 +60,7 @@ describe('loadAccounts errors', () => {
       IC_2_BASE_URL: 'https://anoka2.infinitecampus.org',
       IC_2_DISTRICT: 'anoka', IC_2_USERNAME: 'u2', IC_2_PASSWORD: 'p2',
     };
-    expect(() => loadAccounts(env)).toThrow(/Duplicate district name 'anoka' in IC_2/);
+    expect(() => loadAccounts(env)).toThrow(/Duplicate district name 'anoka' in IC_1 and IC_2/);
   });
 
   it('throws on non-https BASE_URL', () => {

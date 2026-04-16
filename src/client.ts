@@ -40,14 +40,12 @@ export class ICClient {
     if (s && Date.now() - s.loggedInAt < SESSION_TTL_MS) return;
     if (s?.loginInFlight) { await s.loginInFlight; return; }
 
-    const flight = this.login(account);
     if (!s) {
-      s = { cookie: '', loggedInAt: 0, loginInFlight: flight };
+      s = { cookie: '', loggedInAt: 0, loginInFlight: null };
       this.sessions.set(account.name, s);
-    } else {
-      s.loginInFlight = flight;
     }
-    try { await flight; } finally { s.loginInFlight = null; }
+    s.loginInFlight = this.login(account);
+    try { await s.loginInFlight; } finally { s.loginInFlight = null; }
   }
 
   private async login(account: Account): Promise<void> {
@@ -72,11 +70,11 @@ export class ICClient {
     const postCookie = parseSetCookie(postRes.headers.get('set-cookie')) || initCookie;
     if (!postCookie || postRes.status >= 400) throw new AuthFailedError(account.name);
 
-    this.sessions.set(account.name, {
-      cookie: postCookie,
-      loggedInAt: Date.now(),
-      loginInFlight: null,
-    });
+    // Mutate the in-map session in place so concurrent callers'
+    // references stay live (see ensureSession).
+    const session = this.sessions.get(account.name)!;
+    session.cookie = postCookie;
+    session.loggedInAt = Date.now();
   }
 
   async download(
