@@ -29,7 +29,9 @@ interface PrismNotificationsResponse {
   status?: string;
   data?: {
     NotificationList?: {
-      Notification?: PrismNotification[];
+      // IC's prism XML→JSON serializer returns a single object (not a 1-element array)
+      // when there's exactly one notification. Handle both shapes.
+      Notification?: PrismNotification | PrismNotification[];
     };
   };
 }
@@ -141,7 +143,9 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
       args.district,
       `/campus/prism?x=notifications.Notification-retrieve&limitCount=${limit}`,
     ).then((raw) => {
-      const items = raw?.data?.NotificationList?.Notification ?? [];
+      const rawItems = raw?.data?.NotificationList?.Notification;
+      // Coerce to array — prism returns a bare object when there's exactly one notification
+      const items: PrismNotification[] = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
       const trimmed = items.map((n) => pick(n, NOTIFICATION_KEEP));
       return { count: trimmed.length, items: trimmed };
     }).catch((e) => {

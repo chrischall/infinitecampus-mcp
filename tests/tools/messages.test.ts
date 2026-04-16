@@ -126,6 +126,35 @@ describe('ic_list_messages', () => {
     expect('_extraIgnored' in data.notifications.items[0]).toBe(false);
   });
 
+  it('handles prism returning a single notification as a bare object (XML→JSON quirk)', async () => {
+    // IC's prism serializer returns Notification as an object (not a 1-element array) when there's exactly one.
+    setup((path) => {
+      if (path.startsWith('/campus/prism')) return Promise.resolve({ data: { NotificationList: { Notification: PRISM_ITEM } } });
+      if (path === '/campus/api/portal/process-message') return Promise.resolve([]);
+      if (path === '/campus/resources/portal/userNotice') return Promise.resolve([]);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_messages')!({ district: 'anoka' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.notifications.error).toBeUndefined();
+    expect(data.notifications.count).toBe(1);
+    expect(data.notifications.items[0].notificationID).toBe(123);
+  });
+
+  it('handles prism returning no Notification field (empty data)', async () => {
+    setup((path) => {
+      if (path.startsWith('/campus/prism')) return Promise.resolve({ data: { NotificationList: {} } });
+      if (path === '/campus/api/portal/process-message') return Promise.resolve([]);
+      if (path === '/campus/resources/portal/userNotice') return Promise.resolve([]);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_messages')!({ district: 'anoka' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.notifications.error).toBeUndefined();
+    expect(data.notifications.count).toBe(0);
+    expect(data.notifications.items).toEqual([]);
+  });
+
   it('trims inbox messages to the whitelisted fields', async () => {
     setup((path) => {
       if (path.startsWith('/campus/prism')) return Promise.resolve({ data: { NotificationList: { Notification: [] } } });
