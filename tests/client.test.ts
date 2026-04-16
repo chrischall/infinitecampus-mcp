@@ -163,6 +163,142 @@ describe('ICClient.request — retry + concurrency', () => {
   });
 });
 
+describe('ICClient.request — error paths', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('throws AuthFailedError when login POST returns 4xx without cookie', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 401 }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+  });
+
+  it('throws PortalUnreachableError when login POST returns 5xx', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 502 }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
+  });
+
+  it('throws PortalUnreachableError when data GET returns 5xx', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response('', { status: 500 }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
+  });
+
+  it('throws on non-ok, non-5xx, non-401 response', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response('', { status: 404, statusText: 'Not Found' }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/IC 404/);
+  });
+
+  it('returns null when response body is empty', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }));
+    const client = new ICClient(accounts);
+    const result = await client.request('anoka', '/x');
+    expect(result).toBeNull();
+  });
+
+  it('re-logs in after TTL expires (existing session branch)', async () => {
+    fetchSpy
+      // login 1
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      // request 1 OK
+      .mockResolvedValueOnce(new Response(JSON.stringify({ n: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }))
+      // login 2 (after TTL expiry)
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=c' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=d' } }))
+      // request 2 OK
+      .mockResolvedValueOnce(new Response(JSON.stringify({ n: 2 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(accounts);
+    await client.request('anoka', '/x');
+
+    // Force expiry: mutate session loggedInAt via Date.now spy
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
+
+    await client.request('anoka', '/x');
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+  });
+
+  it('throws AuthFailedError when neither login step returns a cookie', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200 })) // no cookie
+      .mockResolvedValueOnce(new Response('', { status: 200 })); // no cookie
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+  });
+
+  it('throws on download non-ok response', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response('', { status: 404 }));
+    const client = new ICClient(accounts);
+    const { mkdtemp, rm } = await import('fs/promises');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const dir = await mkdtemp(join(tmpdir(), 'ic-dl-'));
+    try {
+      await expect(client.download('anoka', '/x', join(dir, 'a.pdf'))).rejects.toThrow(/IC download 404/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('download throws UnknownDistrictError for unknown district', async () => {
+    const client = new ICClient(accounts);
+    await expect(client.download('nope', '/x', '/tmp/foo.pdf')).rejects.toThrow(/Unknown district/);
+  });
+
+  it('download uses octet-stream when no content-type header', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
+    const { mkdtemp, rm } = await import('fs/promises');
+    const { tmpdir } = await import('os');
+    const { join } = await import('path');
+    const dir = await mkdtemp(join(tmpdir(), 'ic-dl-'));
+    try {
+      const client = new ICClient(accounts);
+      const meta = await client.download('anoka', '/x', join(dir, 'a.bin'));
+      expect(meta.contentType).toBe('application/octet-stream');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('parseSetCookie handles empty header via login with no cookies at all', async () => {
+    // Covers the `if (!header) return ''` branch in parseSetCookie
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+  });
+});
+
 describe('ICClient.download', () => {
   let dir: string;
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-test-')); });
