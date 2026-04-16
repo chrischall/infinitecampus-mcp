@@ -1,0 +1,31 @@
+{
+  "name": "infinitecampus-mcp",
+  "version": "0.1.0",
+  "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
+  "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "infinitecampus-mcp": "dist/index.js"
+  },
+  "files": ["dist", ".claude-plugin", "skills", ".mcp.json"],
+  "scripts": {
+    "build": "tsc && npm run bundle",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --external:dotenv --outfile=dist/bundle.js",
+    "dev": "node --env-file=.env dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^17.4.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "@vitest/coverage-v8": "^4.1.2",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}
