@@ -42,3 +42,34 @@ describe('loadAccounts', () => {
     expect(loadAccounts(env)).toHaveLength(1);
   });
 });
+
+describe('loadAccounts errors', () => {
+  it('throws when no accounts configured', () => {
+    expect(() => loadAccounts({})).toThrow(/No Infinite Campus accounts configured/);
+  });
+
+  it('throws on partial account', () => {
+    const env = { ...baseEnv, IC_1_PASSWORD: undefined as unknown as string };
+    expect(() => loadAccounts(env)).toThrow(/Account IC_1 is incomplete: missing PASSWORD/);
+  });
+
+  it('throws on duplicate district name', () => {
+    const env = {
+      ...baseEnv,
+      IC_2_NAME: 'anoka',
+      IC_2_BASE_URL: 'https://anoka2.infinitecampus.org',
+      IC_2_DISTRICT: 'anoka', IC_2_USERNAME: 'u2', IC_2_PASSWORD: 'p2',
+    };
+    expect(() => loadAccounts(env)).toThrow(/Duplicate district name 'anoka' in IC_2/);
+  });
+
+  it('throws on non-https BASE_URL', () => {
+    const env = { ...baseEnv, IC_1_BASE_URL: 'http://anoka.infinitecampus.org' };
+    expect(() => loadAccounts(env)).toThrow(/IC_1_BASE_URL is not a valid https URL/);
+  });
+
+  it('strips trailing slash from BASE_URL', () => {
+    const env = { ...baseEnv, IC_1_BASE_URL: 'https://anoka.infinitecampus.org/' };
+    expect(loadAccounts(env)[0].baseUrl).toBe('https://anoka.infinitecampus.org');
+  });
+});
