@@ -4,3 +4,5 @@ coverage/
 .env
 *.log
 .DS_Store
+*.skill
+*.mcpb
