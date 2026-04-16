@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile as fsWriteFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { ICClient } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
@@ -157,5 +160,61 @@ describe('ICClient.request — retry + concurrency', () => {
       client.request('mpls', '/y'),
     ]);
     expect(loginCount).toBe(2);
+  });
+});
+
+describe('ICClient.download', () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-test-')); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); vi.restoreAllMocks(); });
+
+  it('writes response body to destinationPath and returns metadata', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([1,2,3,4,5]), {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      }));
+
+    const client = new ICClient(accounts);
+    const dest = join(dir, 'report.pdf');
+    const meta = await client.download('anoka', '/campus/path/to/doc', dest);
+
+    expect(meta).toEqual({ path: dest, bytes: 5, contentType: 'application/pdf' });
+    expect((await readFile(dest)).length).toBe(5);
+  });
+
+  it('throws InvalidPath when destination is a directory', async () => {
+    const client = new ICClient(accounts);
+    await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/InvalidPath|destinationPath/);
+  });
+
+  it('throws ParentDirectoryMissing when parent dir does not exist', async () => {
+    const client = new ICClient(accounts);
+    await expect(client.download('anoka', '/x', join(dir, 'nope', 'x.pdf'))).rejects.toThrow(/ParentDirectoryMissing/);
+  });
+
+  it('throws FileExists when file is present and overwrite not set', async () => {
+    const dest = join(dir, 'r.pdf');
+    await fsWriteFile(dest, 'hi');
+    const client = new ICClient(accounts);
+    await expect(client.download('anoka', '/x', dest)).rejects.toThrow(/FileExists/);
+  });
+
+  it('overwrites when overwrite:true', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([9,9,9]), {
+        status: 200, headers: { 'content-type': 'application/pdf' },
+      }));
+    const dest = join(dir, 'r.pdf');
+    await fsWriteFile(dest, 'old');
+    const client = new ICClient(accounts);
+    const meta = await client.download('anoka', '/x', dest, { overwrite: true });
+    expect(meta.bytes).toBe(3);
   });
 });

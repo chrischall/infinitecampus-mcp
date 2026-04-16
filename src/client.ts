@@ -1,4 +1,4 @@
-import { writeFile, mkdir, stat } from 'fs/promises';
+import { writeFile, stat } from 'fs/promises';
 import { dirname } from 'path';
 import type { Account } from './config.js';
 
@@ -79,6 +79,36 @@ export class ICClient {
     });
   }
 
+  async download(
+    district: string, path: string, destinationPath: string,
+    opts: { overwrite?: boolean } = {},
+  ): Promise<{ path: string; bytes: number; contentType: string }> {
+    // Pre-flight checks before authenticating, so we fail fast on bad paths
+    let destStat: Awaited<ReturnType<typeof stat>> | null = null;
+    try { destStat = await stat(destinationPath); } catch { /* not present, ok */ }
+    if (destStat?.isDirectory()) throw new InvalidPathError(destinationPath);
+    if (destStat && !opts.overwrite) throw new FileExistsError(destinationPath);
+
+    const parent = dirname(destinationPath);
+    try { await stat(parent); } catch { throw new ParentDirectoryMissingError(parent); }
+
+    const account = this.accounts.get(district);
+    if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
+    await this.ensureSession(account);
+    const session = this.sessions.get(account.name)!;
+
+    const res = await fetch(`${account.baseUrl}${path}`, { headers: { Cookie: session.cookie } });
+    if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
+
+    const buf = new Uint8Array(await res.arrayBuffer());
+    await writeFile(destinationPath, buf);
+    return {
+      path: destinationPath,
+      bytes: buf.byteLength,
+      contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
   private async doRequest<T>(
     account: Account, path: string, opts: RequestOpts, isRetry: boolean,
   ): Promise<T> {
@@ -134,5 +164,24 @@ export class SessionExpiredError extends Error {
   constructor(public district: string) {
     super(`Session expired for district '${district}' after re-login retry`);
     this.name = 'SessionExpiredError';
+  }
+}
+
+export class InvalidPathError extends Error {
+  constructor(public path: string) {
+    super(`InvalidPath: destinationPath must be a filename, not a directory: ${path}`);
+    this.name = 'InvalidPathError';
+  }
+}
+export class ParentDirectoryMissingError extends Error {
+  constructor(public path: string) {
+    super(`ParentDirectoryMissing: ${path}`);
+    this.name = 'ParentDirectoryMissingError';
+  }
+}
+export class FileExistsError extends Error {
+  constructor(public path: string) {
+    super(`FileExists at ${path}. Pass overwrite:true to replace.`);
+    this.name = 'FileExistsError';
   }
 }
