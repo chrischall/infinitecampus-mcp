@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ICClient } from '../../src/client.js';
 import { registerDocumentTools } from '../../src/tools/documents.js';
@@ -28,5 +31,40 @@ describe('ic_list_documents', () => {
     expect(JSON.parse(result.content[0].text)).toEqual([
       { id: 'd1', type: 'reportCard', date: '2026-03-15', downloadUrl: '/x.pdf' },
     ]);
+  });
+});
+
+describe('ic_download_document', () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-doc-')); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it('calls client.download with the document URL and destinationPath', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'download').mockResolvedValue({
+      path: join(dir, 'r.pdf'), bytes: 100, contentType: 'application/pdf',
+    });
+    setup(client);
+
+    const result = await handlers.get('ic_download_document')!({
+      district: 'anoka',
+      documentId: '/campus/x.pdf',
+      destinationPath: join(dir, 'r.pdf'),
+    });
+
+    expect(client.download).toHaveBeenCalledWith('anoka', '/campus/x.pdf', join(dir, 'r.pdf'), { overwrite: false });
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ bytes: 100, contentType: 'application/pdf' });
+  });
+
+  it('passes overwrite:true through', async () => {
+    const client = new ICClient(accounts);
+    vi.spyOn(client, 'download').mockResolvedValue({
+      path: 'p', bytes: 1, contentType: 'application/pdf',
+    });
+    setup(client);
+    await handlers.get('ic_download_document')!({
+      district: 'anoka', documentId: '/x', destinationPath: '/p', overwrite: true,
+    });
+    expect(client.download).toHaveBeenCalledWith('anoka', '/x', '/p', { overwrite: true });
   });
 });
