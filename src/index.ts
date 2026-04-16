@@ -29,7 +29,7 @@ import { registerDocumentTools } from './tools/documents.js';
 
 const accounts = loadAccounts();
 const client = new ICClient(accounts);
-const server = new McpServer({ name: 'infinitecampus', version: '0.1.0' });
+const server = new McpServer({ name: 'infinitecampus', version: '0.1.1' });
 
 registerDistrictTools(server, client);
 registerStudentTools(server, client);

@@ -1,15 +1,19 @@
 {
   "dxt_version": "0.1",
   "name": "infinitecampus-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Infinite Campus (Campus Parent) MCP — multi-district",
-  "author": { "name": "Claude Code (AI)" },
+  "author": {
+    "name": "Claude Code (AI)"
+  },
   "server": {
     "type": "node",
     "entry_point": "dist/bundle.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/bundle.js"],
+      "args": [
+        "${__dirname}/dist/bundle.js"
+      ],
       "env": {
         "IC_1_NAME": "${user_config.ic_1_name}",
         "IC_1_BASE_URL": "${user_config.ic_1_base_url}",
