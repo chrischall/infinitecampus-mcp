@@ -219,7 +219,10 @@ export class ICClient {
     await this.ensureSession(account);
     const session = this.sessions.get(account.name)!;
 
-    const res = await fetch(`${account.baseUrl}${path}`, {
+    // Support both relative paths (/campus/...) and absolute URLs
+    // (e.g. report-card URLs from ic_list_documents come fully-qualified).
+    const url = /^https?:\/\//i.test(path) ? path : `${account.baseUrl}${path}`;
+    const res = await fetch(url, {
       headers: {
         Cookie: session.cookie,
         ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),

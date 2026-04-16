@@ -484,8 +484,33 @@ describe('ICClient.download', () => {
     const dest = join(dir, 'report.pdf');
     const meta = await client.download('anoka', '/campus/path/to/doc', dest);
 
+    // Verify fetch was called with the base URL + relative path
+    const lastCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    expect(String(lastCall[0])).toBe('https://anoka.infinitecampus.org/campus/path/to/doc');
     expect(meta).toEqual({ path: dest, bytes: 5, contentType: 'application/pdf' });
     expect((await readFile(dest)).length).toBe(5);
+  });
+
+  it('uses the path verbatim when it is already an absolute URL', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(new Uint8Array([9, 9, 9]), {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      }));
+
+    const client = new ICClient(primaryAccount);
+    const dest = join(dir, 'report.pdf');
+    // absolute URL as delivered by ic_list_documents
+    const absoluteUrl = 'https://anoka.infinitecampus.org/campus/grading/reports/reportCard.fop?reportID=15';
+    const meta = await client.download('anoka', absoluteUrl, dest);
+
+    const lastCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    // Should be the exact URL, NOT concatenated (no double baseUrl)
+    expect(String(lastCall[0])).toBe(absoluteUrl);
+    expect(meta.bytes).toBe(3);
   });
 
   it('throws InvalidPath when destination is a directory', async () => {
