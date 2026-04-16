@@ -30,20 +30,14 @@ Status legend: ✅ shipped · 🚧 planned · ⏸️ deferred · 🚫 skipped ·
 | `ic_download_document` | (client download to disk using `url` from `ic_list_documents`) | ✅ |
 | `ic_list_recent_grades` | `GET /campus/api/portal/assignment/recentlyScored?modifiedDate=ISO&personID=X` | ✅ Recently-scored assignments. Takes `since` (YYYY-MM-DD), defaults to 14 days ago. |
 | `ic_list_teachers` | `GET /campus/resources/portal/section/contacts?personID=X` + `GET /campus/resources/portal/studentCounselor/byUser?personID=X` | ✅ Combined teachers (per enrolled section) + counselors. 404 on either sub-endpoint is treated as empty list. |
-| `ic_list_messages` | `GET /campus/prism?x=notifications.Notification-retrieve&limitCount=N` | ✅ Prism notifications. Does NOT include Message Center inbox or announcements — planned augmentation. |
+| `ic_list_messages` | `GET /campus/prism?x=notifications.Notification-retrieve&limitCount=N` + `GET /campus/api/portal/process-message` + `GET /campus/resources/portal/userNotice` | ✅ Combines three sources: prism notifications (assignment/grade/attendance alerts), Messenger 2.0 inbox (teacher messages, district announcements), and portal userNotice announcements. `limit` caps prism only (high-volume source). Per-section `error` field if any source fails. |
 | `ic_get_message` | `GET /campus/prism?x=notifications.NotificationUser-countUnviewed` | ✅ Unread count only |
+| `ic_list_assessments` | `GET /campus/resources/prism/portal/assessments?personID=X&calendarID=Y` | ✅ Standardized test scores (stateTests, nationalTests, districtTests). Auto-resolves calendarID per enrollment; loops through all enrollments. Drops `assessmentHTML`. 404 on every enrollment → FeatureDisabled. |
+| `ic_list_fees` | `GET /campus/api/portal/fees/feeAssignments?personID=X` + `GET /campus/api/portal/fees/feeTransactionDetail/totalSurplus/-1?personID=X` | ✅ Fee assignments (charges owed) + surplus/balance (raw number). Both endpoints run in parallel. FeatureDisabled only if both 404; partial success returns working side with `notes`. |
 
 ---
 
 ## Planned — new tools
-
-### Batch 2
-
-| Tool | Endpoint | Notes |
-|---|---|---|
-| `ic_list_assessments` | `GET /campus/resources/prism/portal/assessments?personID=X&calendarID=Y` | Standardized test scores (SAT, EOC, state tests). Auto-resolves `calendarID` from student. |
-| `ic_list_fees` | `GET /campus/api/portal/fees/feeAssignments?personID=X` + `GET /campus/api/portal/fees/feeTransactionDetail/totalSurplus/-1?personID=X` | Fee assignments (charges owed) + running balance/surplus. |
-| `ic_list_messages` (augmented) | Current: `notifications.Notification-retrieve` only. Augment with: `GET /campus/api/portal/process-message` (Messenger 2.0 inbox) + `GET /campus/resources/portal/userNotice` (portal announcements) | Combine three sources into one response. 33 Messenger 2.0 messages on Westside (dropoff procedures, weather closures, etc.) — currently invisible to the MCP. |
 
 ### Internal improvement
 
