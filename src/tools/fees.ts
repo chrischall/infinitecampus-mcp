@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent, is404, featureDisabled } from './_shared.js';
 
 type FeeAssignment = Record<string, unknown>;
 
@@ -14,10 +15,6 @@ const argsSchema = z.object({
   district: z.string(),
   studentId: z.string().describe('Student personID from ic_list_students'),
 });
-
-function is404(e: unknown): boolean {
-  return e instanceof Error && e.message.startsWith('IC 404 ');
-}
 
 export function registerFeeTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_fees', {
@@ -49,13 +46,7 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
 
     // Both endpoints 404 → FeatureDisabled
     if (!assignments.ok && !surplus.ok) {
-      const warn = {
-        warning: 'FeatureDisabled',
-        feature: 'fees',
-        district: args.district,
-        data: { totalSurplus: null, feeAssignments: [] },
-      };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
+      return featureDisabled('fees', args.district, { totalSurplus: null, feeAssignments: [] });
     }
 
     const response: FeesResponse = {
@@ -68,6 +59,6 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
     if (!surplus.ok) notes.push('totalSurplus endpoint returned 404 (module may be disabled for this district)');
     if (notes.length > 0) response.notes = notes;
 
-    return { content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }] };
+    return textContent(response);
   });
 }

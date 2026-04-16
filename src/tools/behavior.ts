@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent, is404, featureDisabled } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -21,12 +22,9 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
     if (args.until) params.set('endDate', args.until);
     try {
       const data = await client.request(args.district, `/campus/resources/portal/behavior?${params}`);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      return textContent(data);
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith('IC 404 ')) {
-        const warn = { warning: 'FeatureDisabled', feature: 'behavior', district: args.district, data: [] };
-        return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
-      }
+      if (is404(e)) return featureDisabled('behavior', args.district);
       throw e;
     }
   });

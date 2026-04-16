@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent } from './_shared.js';
 
 interface RawRecentGrade {
   assignmentName?: string;
@@ -79,6 +80,6 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
       }
       return out;
     });
-    return { content: [{ type: 'text' as const, text: JSON.stringify(trimmed, null, 2) }] };
+    return textContent(trimmed);
   });
 }

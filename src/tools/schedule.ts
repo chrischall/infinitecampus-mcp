@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string().describe('District name from ic_list_districts'),
@@ -18,6 +19,6 @@ export function registerScheduleTools(server: McpServer, client: ICClient): void
     const args = argsSchema.parse(rawArgs);
     const params = new URLSearchParams({ personID: args.studentId });
     const data = await client.request(args.district, `/campus/resources/portal/roster?${params}`);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+    return textContent(data);
   });
 }

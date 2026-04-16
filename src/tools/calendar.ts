@@ -1,20 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-
-interface RawEnrollment {
-  enrollmentID: number;
-  calendarID: number;
-  structureID: number;
-  calendarName: string;
-}
-
-interface RawStudent {
-  personID: number;
-  firstName: string;
-  lastName: string;
-  enrollments: RawEnrollment[];
-}
+import { textContent, findStudent, studentNotFound } from './_shared.js';
 
 interface RawTerm {
   termID: number;
@@ -49,7 +36,7 @@ interface CalendarByEnrollment {
   enrollmentID: number;
   calendarID: number;
   structureID: number;
-  calendarName: string;
+  calendarName?: string;
   terms: TrimmedTerm[];
 }
 
@@ -70,11 +57,8 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
     const args = argsSchema.parse(rawArgs);
 
     // 1. Get student to find their enrollment(s) → calendarID + structureID
-    const students = await client.request<RawStudent[]>(args.district, '/campus/api/portal/students');
-    const student = students.find((s) => String(s.personID) === args.studentId);
-    if (!student) {
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'StudentNotFound', studentId: args.studentId }, null, 2) }] };
-    }
+    const student = await findStudent(client, args.district, args.studentId);
+    if (!student) return studentNotFound(args.studentId);
 
     const result: CalendarByEnrollment[] = [];
 
@@ -123,6 +107,6 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
       });
     }
 
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    return textContent(result);
   });
 }

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent, is404 } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -60,7 +61,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
       args.district,
       `/campus/resources/portal/section/contacts?personID=${personID}`,
     ).catch((e) => {
-      if (e instanceof Error && e.message.startsWith('IC 404 ')) return null;
+      if (is404(e)) return null;
       throw e;
     });
 
@@ -68,7 +69,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
       args.district,
       `/campus/resources/portal/studentCounselor/byUser?personID=${personID}`,
     ).catch((e) => {
-      if (e instanceof Error && e.message.startsWith('IC 404 ')) return null;
+      if (is404(e)) return null;
       throw e;
     });
 
@@ -77,8 +78,6 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
     const teachers = (teachersRaw ?? []).map((t) => trimRecord(t));
     const counselors = (counselorsRaw ?? []).map((c) => trimRecord(c));
 
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ counselors, teachers }, null, 2) }],
-    };
+    return textContent({ counselors, teachers });
   });
 }

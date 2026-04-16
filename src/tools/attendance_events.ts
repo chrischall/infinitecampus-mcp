@@ -1,18 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-
-interface RawEnrollment {
-  enrollmentID: number;
-  calendarID: number;
-  structureID: number;
-  calendarName: string;
-}
-
-interface RawStudent {
-  personID: number;
-  enrollments?: RawEnrollment[];
-}
+import { textContent, is404, featureDisabled, findStudent, studentNotFound } from './_shared.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -134,11 +123,8 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
-    const students = await client.request<RawStudent[]>(args.district, '/campus/api/portal/students');
-    const student = students.find((s) => String(s.personID) === args.studentId);
-    if (!student) {
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'StudentNotFound', studentId: args.studentId }, null, 2) }] };
-    }
+    const student = await findStudent(client, args.district, args.studentId);
+    if (!student) return studentNotFound(args.studentId);
 
     const enrollments = student.enrollments ?? [];
     const results: TrimmedEnrollmentEvents[] = [];
@@ -167,12 +153,9 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
           results.push(trimmed);
         }
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };
+      return textContent(results);
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith('IC 404 ')) {
-        const warn = { warning: 'FeatureDisabled', feature: 'attendance_events', district: args.district, data: [] };
-        return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
-      }
+      if (is404(e)) return featureDisabled('attendance_events', args.district);
       throw e;
     }
   });

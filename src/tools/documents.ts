@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent, is404, featureDisabled } from './_shared.js';
 
 interface RawDocument {
   name?: string;
@@ -52,12 +53,9 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
         if (d.endYear !== undefined) out.endYear = d.endYear;
         return out;
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(trimmed, null, 2) }] };
+      return textContent(trimmed);
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith('IC 404 ')) {
-        const warn = { warning: 'FeatureDisabled', feature: 'documents', district: args.district, data: [] };
-        return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
-      }
+      if (is404(e)) return featureDisabled('documents', args.district);
       throw e;
     }
   });
@@ -72,11 +70,10 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
       const meta = await client.download(args.district, args.documentId, args.destinationPath, {
         overwrite: args.overwrite ?? false,
       });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(meta, null, 2) }] };
+      return textContent(meta);
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('IC download 404')) {
-        const warn = { warning: 'FeatureDisabled', feature: 'documents', district: args.district };
-        return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
+        return textContent({ warning: 'FeatureDisabled', feature: 'documents', district: args.district });
       }
       throw e;
     }

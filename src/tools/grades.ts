@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -18,6 +19,6 @@ export function registerGradeTools(server: McpServer, client: ICClient): void {
     const params = new URLSearchParams({ personID: args.studentId });
     if (args.termId) params.set('termID', args.termId);
     const data = await client.request(args.district, `/campus/resources/portal/grades?${params}`);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+    return textContent(data);
   });
 }

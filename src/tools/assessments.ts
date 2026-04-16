@@ -1,20 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-
-interface RawEnrollment {
-  enrollmentID: number;
-  calendarID: number;
-  structureID: number;
-  calendarName: string;
-}
-
-interface RawStudent {
-  personID: number;
-  firstName: string;
-  lastName: string;
-  enrollments: RawEnrollment[];
-}
+import { textContent, findStudent, studentNotFound, featureDisabled, is404 } from './_shared.js';
 
 // Test item shapes vary by district and test type — we pass them through unchanged.
 type AnyTest = Record<string, unknown>;
@@ -30,7 +17,7 @@ interface RawAssessmentResponse {
 interface AssessmentsByEnrollment {
   enrollmentID: number;
   calendarID: number;
-  calendarName: string;
+  calendarName?: string;
   stateTests: AnyTest[];
   nationalTests: AnyTest[];
   districtTests: { tests: AnyTest[]; typeTests: AnyTest[] };
@@ -50,11 +37,8 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
-    const students = await client.request<RawStudent[]>(args.district, '/campus/api/portal/students');
-    const student = students.find((s) => String(s.personID) === args.studentId);
-    if (!student) {
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'StudentNotFound', studentId: args.studentId }, null, 2) }] };
-    }
+    const student = await findStudent(client, args.district, args.studentId);
+    if (!student) return studentNotFound(args.studentId);
 
     const personIDEnc = encodeURIComponent(args.studentId);
     const result: AssessmentsByEnrollment[] = [];
@@ -78,7 +62,7 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
           },
         });
       } catch (e) {
-        if (e instanceof Error && e.message.startsWith('IC 404 ')) {
+        if (is404(e)) {
           feature404 = true;
           continue;
         }
@@ -89,10 +73,9 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
     // If every enrollment 404'd (and at least one was tried), treat as FeatureDisabled.
     // feature404 can only be set inside the enrollment loop, so we know enrollments was non-empty.
     if (feature404 && result.length === 0) {
-      const warn = { warning: 'FeatureDisabled', feature: 'assessments', district: args.district, data: [] };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(warn, null, 2) }] };
+      return featureDisabled('assessments', args.district);
     }
 
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    return textContent(result);
   });
 }

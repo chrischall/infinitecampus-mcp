@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import { textContent } from './_shared.js';
 
 interface RawAssignment {
   assignmentName: string;
@@ -62,6 +63,6 @@ export function registerAssignmentTools(server: McpServer, client: ICClient): vo
       data = data.filter((a) => a.missing);
     }
 
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+    return textContent(data);
   });
 }
