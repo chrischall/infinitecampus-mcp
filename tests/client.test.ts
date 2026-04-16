@@ -31,14 +31,9 @@ describe('ICClient.request — login + GET', () => {
   afterEach(() => vi.restoreAllMocks());
 
   function mockLoginThenGet(jsonData: unknown) {
-    // 1st call: GET login form → 200 with Set-Cookie: JSESSIONID=...
-    // 2nd call: POST login → 200 with Set-Cookie
-    // 3rd call: GET data → 200 JSON
+    // 1st call: POST login → 200 with Set-Cookie
+    // 2nd call: GET data → 200 JSON
     fetchSpy
-      .mockResolvedValueOnce(new Response('', {
-        status: 200,
-        headers: { 'set-cookie': 'JSESSIONID=abc123; Path=/; HttpOnly' },
-      }))
       .mockResolvedValueOnce(new Response('', {
         status: 200,
         headers: { 'set-cookie': 'JSESSIONID=session-after-login; Path=/' },
@@ -56,7 +51,7 @@ describe('ICClient.request — login + GET', () => {
     const result = await client.request<{ ok: boolean }>('anoka', '/campus/api/portal/parents/students');
 
     expect(result).toEqual({ ok: true });
-    expect(fetchSpy).toHaveBeenCalledTimes(3); // GET login, POST login, GET data
+    expect(fetchSpy).toHaveBeenCalledTimes(2); // POST login, GET data
 
     // 2nd request: only one new fetch (data only, login reused)
     fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ ok: 2 }), {
@@ -64,7 +59,7 @@ describe('ICClient.request — login + GET', () => {
       headers: { 'content-type': 'application/json' },
     }));
     await client.request('anoka', '/campus/api/portal/parents/students');
-    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it('throws UnknownDistrictError when district not configured', async () => {
@@ -80,16 +75,12 @@ describe('ICClient.request — retry + concurrency', () => {
 
   it('re-logs in once on 401 and retries', async () => {
     fetchSpy
-      // First login
-      .mockResolvedValueOnce(new Response('', { status: 200,
-        headers: { 'set-cookie': 'JSESSIONID=a; Path=/' } }))
+      // First login (POST only)
       .mockResolvedValueOnce(new Response('', { status: 200,
         headers: { 'set-cookie': 'JSESSIONID=b; Path=/' } }))
       // GET returns 401
       .mockResolvedValueOnce(new Response('', { status: 401 }))
-      // Re-login
-      .mockResolvedValueOnce(new Response('', { status: 200,
-        headers: { 'set-cookie': 'JSESSIONID=c; Path=/' } }))
+      // Re-login (POST only)
       .mockResolvedValueOnce(new Response('', { status: 200,
         headers: { 'set-cookie': 'JSESSIONID=d; Path=/' } }))
       // Retry succeeds
@@ -100,15 +91,13 @@ describe('ICClient.request — retry + concurrency', () => {
     const client = new ICClient(accounts);
     const result = await client.request('anoka', '/x');
     expect(result).toEqual({ ok: true });
-    expect(fetchSpy).toHaveBeenCalledTimes(6);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
   it('throws SessionExpiredError on second 401', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response('', { status: 401 }))
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=c' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=d' } }))
       .mockResolvedValueOnce(new Response('', { status: 401 }));
 
@@ -120,9 +109,6 @@ describe('ICClient.request — retry + concurrency', () => {
     let loginCount = 0;
     fetchSpy.mockImplementation(async (url) => {
       const u = String(url);
-      if (u.includes('/campus/portal/parents/')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } });
-      }
       if (u.includes('/campus/verify.jsp')) {
         loginCount++;
         return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } });
@@ -145,8 +131,8 @@ describe('ICClient.request — retry + concurrency', () => {
     let loginCount = 0;
     fetchSpy.mockImplementation(async (url) => {
       const u = String(url);
-      if (u.includes('/verify.jsp')) loginCount++;
-      if (u.endsWith('.jsp') || u.includes('/verify.jsp')) {
+      if (u.includes('/verify.jsp')) {
+        loginCount++;
         return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
       }
       return new Response(JSON.stringify({ ok: 1 }), {
@@ -170,15 +156,20 @@ describe('ICClient.request — error paths', () => {
 
   it('throws AuthFailedError when login POST returns 4xx without cookie', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 401 }));
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+  });
+
+  it('throws AuthFailedError when login POST returns 200 with password-error', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('<div class="password-error">Invalid credentials</div>', { status: 200 }));
     const client = new ICClient(accounts);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
   it('throws PortalUnreachableError when login POST returns 5xx', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 502 }));
     const client = new ICClient(accounts);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
@@ -186,7 +177,6 @@ describe('ICClient.request — error paths', () => {
 
   it('throws PortalUnreachableError when data GET returns 5xx', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response('', { status: 500 }));
     const client = new ICClient(accounts);
@@ -195,7 +185,6 @@ describe('ICClient.request — error paths', () => {
 
   it('throws on non-ok, non-5xx, non-401 response', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response('', { status: 404, statusText: 'Not Found' }));
     const client = new ICClient(accounts);
@@ -204,7 +193,6 @@ describe('ICClient.request — error paths', () => {
 
   it('returns null when response body is empty', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response('', { status: 200 }));
     const client = new ICClient(accounts);
@@ -214,15 +202,13 @@ describe('ICClient.request — error paths', () => {
 
   it('re-logs in after TTL expires (existing session branch)', async () => {
     fetchSpy
-      // login 1
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      // login 1 (POST only)
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       // request 1 OK
       .mockResolvedValueOnce(new Response(JSON.stringify({ n: 1 }), {
         status: 200, headers: { 'content-type': 'application/json' },
       }))
-      // login 2 (after TTL expiry)
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=c' } }))
+      // login 2 (after TTL expiry, POST only)
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=d' } }))
       // request 2 OK
       .mockResolvedValueOnce(new Response(JSON.stringify({ n: 2 }), {
@@ -238,12 +224,11 @@ describe('ICClient.request — error paths', () => {
     vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
 
     await client.request('anoka', '/x');
-    expect(fetchSpy).toHaveBeenCalledTimes(6);
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
-  it('throws AuthFailedError when neither login step returns a cookie', async () => {
+  it('throws AuthFailedError when login POST returns no cookie', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200 })) // no cookie
       .mockResolvedValueOnce(new Response('', { status: 200 })); // no cookie
     const client = new ICClient(accounts);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
@@ -251,7 +236,6 @@ describe('ICClient.request — error paths', () => {
 
   it('throws on download non-ok response', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response('', { status: 404 }));
     const client = new ICClient(accounts);
@@ -273,7 +257,6 @@ describe('ICClient.request — error paths', () => {
 
   it('download uses octet-stream when no content-type header', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }));
     const { mkdtemp, rm } = await import('fs/promises');
@@ -289,13 +272,28 @@ describe('ICClient.request — error paths', () => {
     }
   });
 
-  it('parseSetCookie handles empty header via login with no cookies at all', async () => {
-    // Covers the `if (!header) return ''` branch in parseSetCookie
+  it('parseSetCookies handles empty header via login with no cookies at all', async () => {
+    // Covers the no-cookie branch in parseSetCookies
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200 }))
       .mockResolvedValueOnce(new Response('', { status: 200 }));
     const client = new ICClient(accounts);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+  });
+
+  it('parseSetCookies falls back to get("set-cookie") when getSetCookie is unavailable', async () => {
+    // Covers the fallback branch in parseSetCookies when getSetCookie
+    // is not present on the headers object (optional chaining + comma fallback).
+    const loginRes = new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=fallback; Path=/' } });
+    // Delete getSetCookie entirely so optional chaining evaluates to undefined
+    (loginRes.headers as any).getSetCookie = undefined;
+    fetchSpy
+      .mockResolvedValueOnce(loginRes)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+    const client = new ICClient(accounts);
+    const result = await client.request('anoka', '/x');
+    expect(result).toEqual({ ok: true });
   });
 });
 
@@ -307,7 +305,6 @@ describe('ICClient.download', () => {
   it('writes response body to destinationPath and returns metadata', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array([1,2,3,4,5]), {
         status: 200,
@@ -342,7 +339,6 @@ describe('ICClient.download', () => {
   it('overwrites when overwrite:true', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy
-      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array([9,9,9]), {
         status: 200, headers: { 'content-type': 'application/pdf' },
