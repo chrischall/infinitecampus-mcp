@@ -1,0 +1,29 @@
+{
+  "dxt_version": "0.1",
+  "name": "infinitecampus-mcp",
+  "version": "0.1.0",
+  "description": "Infinite Campus (Campus Parent) MCP — multi-district",
+  "author": { "name": "Claude Code (AI)" },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/bundle.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/bundle.js"],
+      "env": {
+        "IC_1_NAME": "${user_config.ic_1_name}",
+        "IC_1_BASE_URL": "${user_config.ic_1_base_url}",
+        "IC_1_DISTRICT": "${user_config.ic_1_district}",
+        "IC_1_USERNAME": "${user_config.ic_1_username}",
+        "IC_1_PASSWORD": "${user_config.ic_1_password}"
+      }
+    }
+  },
+  "user_config": {
+    "ic_1_name": { "type": "string", "title": "District 1 nickname", "required": true },
+    "ic_1_base_url": { "type": "string", "title": "District 1 base URL (https://...)", "required": true },
+    "ic_1_district": { "type": "string", "title": "District 1 app name", "required": true },
+    "ic_1_username": { "type": "string", "title": "District 1 username", "required": true },
+    "ic_1_password": { "type": "string", "title": "District 1 password", "required": true, "sensitive": true }
+  }
+}

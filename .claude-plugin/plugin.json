@@ -1,0 +1,11 @@
+{
+  "name": "infinitecampus-mcp",
+  "version": "0.1.0",
+  "description": "Infinite Campus Campus Parent MCP server (multi-district)",
+  "mcp_servers": {
+    "infinitecampus": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"]
+    }
+  }
+}
