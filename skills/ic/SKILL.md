@@ -114,16 +114,14 @@ Every tool except `ic_list_districts` takes `district` as its first arg (the dis
 ### Documents
 | Tool | Notes |
 |------|-------|
-| `ic_list_documents(district, studentId)` | Metadata only (report cards, transcripts, etc.). |
-| `ic_download_document(district, studentId, documentId, destinationPath)` | Writes the PDF to `destinationPath` on disk. **`destinationPath` is required** — confirm the path with the user before calling. |
+| `ic_list_documents(district, studentId)` | Metadata only (report cards, transcripts, etc.). Returns `FeatureDisabled` if the district has the documents module turned off. |
+| `ic_download_document(district, documentId, destinationPath)` | Writes the PDF to `destinationPath` on disk. **`destinationPath` is required** — confirm the path with the user before calling. Returns `FeatureDisabled` if unavailable. |
 
-### Messages
+### Notifications
 | Tool | Notes |
 |------|-------|
-| `ic_list_messages(district, folder?, page?, size?)` | `folder` is `inbox` or `sent`. Paginated. |
-| `ic_get_message(district, messageId)` | Full message body. |
-| `ic_list_message_recipients(district)` | Valid recipient IDs (teachers, staff) for this district. Call before `ic_send_message` to validate recipients. |
-| `ic_send_message(district, subject, body, recipientIds[])` | **Sends a real message through the portal.** Recipients must come from `ic_list_message_recipients` — made-up IDs will fail. |
+| `ic_list_messages(district, limit?)` | Portal notifications (district announcements, teacher messages, system alerts) via prism notification system. |
+| `ic_get_message(district)` | Unread notification/message count. |
 
 ## Workflows
 
@@ -139,11 +137,6 @@ Every tool except `ic_list_districts` takes `district` as its first arg (the dis
 **Today's schedule:**
 - `ic_get_schedule(district, studentId)` — returns today's classes by default
 
-**Email a teacher:**
-1. `ic_list_message_recipients(district)` → find the teacher's recipient ID
-2. Draft subject/body with the user and confirm
-3. `ic_send_message(district, subject, body, [teacherRecipientId])`
-
 **Get the report card:**
 1. `ic_list_documents(district, studentId)` → find the report card's `documentId`
 2. Confirm destination path with the user
@@ -151,6 +144,5 @@ Every tool except `ic_list_districts` takes `district` as its first arg (the dis
 
 ## Caution
 
-- `ic_send_message` actually sends a portal message to teachers/staff — always confirm subject, body, and recipients with the user before calling.
 - `ic_download_document` writes a PDF to disk at `destinationPath` — confirm the path with the user; overwrites silently.
-- Endpoint behavior varies by district. If `ic_list_behavior` or `ic_list_food_service` returns a `FeatureDisabled` warning, that module is simply turned off for the district — it's not an error.
+- Endpoint behavior varies by district. If `ic_list_behavior`, `ic_list_food_service`, `ic_list_documents`, or `ic_download_document` returns a `FeatureDisabled` warning, that module is simply turned off for the district — it's not an error.

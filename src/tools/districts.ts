@@ -6,6 +6,7 @@ export function registerDistrictTools(server: McpServer, client: ICClient): void
     description: 'List Infinite Campus districts configured for this MCP server. Returns names + base URLs (no credentials).',
     annotations: { readOnlyHint: true },
   }, async () => {
+    await client.ensureDiscovery();
     const data = client.listDistricts();
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
   });

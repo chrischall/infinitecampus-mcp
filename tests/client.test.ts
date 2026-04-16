@@ -31,6 +31,45 @@ describe('ICClient.listDistricts', () => {
   });
 });
 
+describe('ICClient.ensureDiscovery', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('triggers login for the primary account', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=disc; Path=/' },
+      }))
+      .mockResolvedValueOnce(noLinkedAccounts());
+
+    const client = new ICClient(primaryAccount);
+    await client.ensureDiscovery();
+
+    // Should have called fetch twice: login POST + CUPS linkedAccounts
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/campus/verify.jsp');
+  });
+
+  it('is a no-op when session is already active', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=disc; Path=/' },
+      }))
+      .mockResolvedValueOnce(noLinkedAccounts());
+
+    const client = new ICClient(primaryAccount);
+    await client.ensureDiscovery();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    // Second call should be a no-op (session still valid)
+    await client.ensureDiscovery();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('ICClient.request — login + GET', () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 

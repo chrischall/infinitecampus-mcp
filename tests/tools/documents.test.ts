@@ -32,6 +32,22 @@ describe('ic_list_documents', () => {
       { id: 'd1', type: 'reportCard', date: '2026-03-15', downloadUrl: '/x.pdf' },
     ]);
   });
+
+  it('returns FeatureDisabled on 404', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 404 Not Found for /campus/resources/portal/documents?personID=123'));
+    setup(client);
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '123' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toEqual({ warning: 'FeatureDisabled', feature: 'documents', district: 'anoka', data: [] });
+  });
+
+  it('rethrows non-404 errors', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 500 Internal Server Error'));
+    setup(client);
+    await expect(handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '123' })).rejects.toThrow('IC 500');
+  });
 });
 
 describe('ic_download_document', () => {
@@ -66,5 +82,25 @@ describe('ic_download_document', () => {
       district: 'anoka', documentId: '/x', destinationPath: '/p', overwrite: true,
     });
     expect(client.download).toHaveBeenCalledWith('anoka', '/x', '/p', { overwrite: true });
+  });
+
+  it('returns FeatureDisabled on download 404', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'download').mockRejectedValue(new Error('IC download 404 for /campus/x.pdf'));
+    setup(client);
+    const result = await handlers.get('ic_download_document')!({
+      district: 'anoka', documentId: '/campus/x.pdf', destinationPath: join(dir, 'r.pdf'),
+    });
+    const data = JSON.parse(result.content[0].text);
+    expect(data).toEqual({ warning: 'FeatureDisabled', feature: 'documents', district: 'anoka' });
+  });
+
+  it('rethrows non-404 download errors', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'download').mockRejectedValue(new Error('IC download 500 for /campus/x.pdf'));
+    setup(client);
+    await expect(handlers.get('ic_download_document')!({
+      district: 'anoka', documentId: '/campus/x.pdf', destinationPath: join(dir, 'r.pdf'),
+    })).rejects.toThrow('IC download 500');
   });
 });

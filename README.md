@@ -15,9 +15,9 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 | Behavior | `ic_list_behavior` |
 | Food service | `ic_list_food_service` |
 | Documents | `ic_list_documents`, `ic_download_document` |
-| Messages | `ic_list_messages`, `ic_get_message`, `ic_list_message_recipients`, `ic_send_message` |
+| Notifications | `ic_list_messages` (prism notifications), `ic_get_message` (unread count) |
 
-Tools that the harness will gate as write/IO operations: `ic_send_message`, `ic_download_document`.
+Tools that the harness will gate as write/IO operations: `ic_download_document`.
 
 ## Configuration
 

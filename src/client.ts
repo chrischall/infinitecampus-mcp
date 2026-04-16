@@ -30,9 +30,16 @@ export class ICClient {
   private accounts = new Map<string, Account>();
   private sessions = new Map<string, Session>();
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
+  private primaryName: string;
 
   constructor(account: Account) {
     this.accounts.set(account.name, account);
+    this.primaryName = account.name;
+  }
+
+  async ensureDiscovery(): Promise<void> {
+    // Ensure primary account is logged in, which triggers CUPS linked-district discovery
+    await this.ensureSession(this.accounts.get(this.primaryName)!);
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {

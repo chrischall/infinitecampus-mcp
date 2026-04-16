@@ -17,6 +17,7 @@ function setup() {
     handlers.set(name, cb as ToolHandler);
     return undefined as never;
   });
+  vi.spyOn(client, 'ensureDiscovery').mockResolvedValue(undefined);
   registerDistrictTools(server, client);
   return client;
 }
@@ -24,9 +25,10 @@ function setup() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('ic_list_districts', () => {
-  it('returns configured district (no creds)', async () => {
-    setup();
+  it('calls ensureDiscovery then returns configured district (no creds)', async () => {
+    const client = setup();
     const result = await handlers.get('ic_list_districts')!({});
+    expect(client.ensureDiscovery).toHaveBeenCalledOnce();
     const data = JSON.parse(result.content[0].text);
     expect(data).toEqual([
       { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', linked: false },
