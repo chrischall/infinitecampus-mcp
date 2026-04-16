@@ -1,11 +1,11 @@
 ---
 name: ic
-description: This skill should be used when the user asks about Infinite Campus (Campus Parent portal) data for their kids. Triggers on phrases like "check IC", "Infinite Campus", "what's my kid's grade", "any missing assignments", "school messages", "report card", "lunch balance", or any request about a student's schedule, grades, attendance, behavior, food service, documents, or portal messages. Multi-district: a parent of kids in different districts can query and act across all of them from one MCP instance.
+description: This skill should be used when the user asks about Infinite Campus (Campus Parent portal) data for their kids. Triggers on phrases like "check IC", "Infinite Campus", "what's my kid's grade", "any missing assignments", "school messages", "report card", "lunch balance", or any request about a student's schedule, grades, attendance, behavior, food service, documents, or portal messages. Linked districts are auto-discovered via CUPS SSO.
 ---
 
 # infinitecampus-mcp
 
-MCP server for Infinite Campus (Campus Parent portal) — read student schedules, grades, assignments, attendance, behavior, food service, documents, and portal messages across one or more districts.
+MCP server for Infinite Campus (Campus Parent portal) — read student schedules, grades, assignments, attendance, behavior, food service, documents, and portal messages. Linked districts are auto-discovered via CUPS SSO after primary login.
 
 - **Source:** [github.com/chrischall/infinitecampus-mcp](https://github.com/chrischall/infinitecampus-mcp)
 - **npm:** [npmjs.com/package/infinitecampus-mcp](https://www.npmjs.com/package/infinitecampus-mcp)
@@ -14,7 +14,7 @@ MCP server for Infinite Campus (Campus Parent portal) — read student schedules
 
 ### Option A — Claude Code (direct MCP, no mcporter)
 
-Add to `.mcp.json` in your project or `~/.claude/mcp.json`. Districts are numbered (`IC_1_*`, `IC_2_*`, …); the loader scans sequentially until a gap:
+Add to `.mcp.json` in your project or `~/.claude/mcp.json`:
 
 ```json
 {
@@ -23,18 +23,18 @@ Add to `.mcp.json` in your project or `~/.claude/mcp.json`. Districts are number
       "command": "npx",
       "args": ["-y", "infinitecampus-mcp"],
       "env": {
-        "IC_1_NAME": "Springfield",
-        "IC_1_BASE_URL": "https://campus.springfield.k12.example.us",
-        "IC_1_DISTRICT": "springfield",
-        "IC_1_USERNAME": "you@example.com",
-        "IC_1_PASSWORD": "yourpassword"
+        "IC_BASE_URL": "https://campus.springfield.k12.example.us",
+        "IC_DISTRICT": "springfield",
+        "IC_USERNAME": "you@example.com",
+        "IC_PASSWORD": "yourpassword",
+        "IC_NAME": "Springfield"
       }
     }
   }
 }
 ```
 
-To add more districts, append `IC_2_NAME`, `IC_2_BASE_URL`, `IC_2_DISTRICT`, `IC_2_USERNAME`, `IC_2_PASSWORD`, then `IC_3_*`, etc. The loader stops at the first missing number.
+Linked districts (via CUPS SSO) are auto-discovered after login — no extra config needed. `IC_NAME` is optional and defaults to `IC_DISTRICT`.
 
 ### Option B — mcporter
 
@@ -55,8 +55,8 @@ npm install && npm run build
 
 ```bash
 cp .env.example .env
-# Edit .env: set IC_1_NAME, IC_1_BASE_URL, IC_1_DISTRICT, IC_1_USERNAME, IC_1_PASSWORD
-# Add IC_2_*, IC_3_*, ... for additional districts
+# Edit .env: set IC_BASE_URL, IC_DISTRICT, IC_USERNAME, IC_PASSWORD
+# IC_NAME is optional (defaults to IC_DISTRICT)
 ```
 
 #### 3. Register with mcporter
@@ -64,11 +64,11 @@ cp .env.example .env
 ```bash
 mcporter config add ic \
   --command "infinitecampus-mcp" \
-  --env "IC_1_NAME=Springfield" \
-  --env "IC_1_BASE_URL=https://campus.springfield.k12.example.us" \
-  --env "IC_1_DISTRICT=springfield" \
-  --env "IC_1_USERNAME=you@example.com" \
-  --env "IC_1_PASSWORD=yourpassword" \
+  --env "IC_BASE_URL=https://campus.springfield.k12.example.us" \
+  --env "IC_DISTRICT=springfield" \
+  --env "IC_USERNAME=you@example.com" \
+  --env "IC_PASSWORD=yourpassword" \
+  --env "IC_NAME=Springfield" \
   --config ~/.mcporter/mcporter.json
 ```
 
@@ -94,7 +94,7 @@ Every tool except `ic_list_districts` takes `district` as its first arg (the dis
 ### Districts & Students
 | Tool | Notes |
 |------|-------|
-| `ic_list_districts` | Lists configured districts. Call this first — other tools need the `district` name. |
+| `ic_list_districts` | Lists configured districts (primary + any CUPS-linked). Call this first — other tools need the `district` name. |
 | `ic_list_students(district)` | Lists students (kids) attached to the portal account for a district. Use the `personID` for `studentId` on other tools. |
 
 ### Academics
@@ -128,7 +128,7 @@ Every tool except `ic_list_districts` takes `district` as its first arg (the dis
 ## Workflows
 
 **Discovery (first time):**
-1. `ic_list_districts` → see configured districts
+1. `ic_list_districts` → see configured + linked districts
 2. For each district: `ic_list_students(district)` → collect kids and personIDs
 
 **Are my kids OK?**

@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "infinitecampus-mcp",
   "version": "0.1.1",
-  "description": "Infinite Campus (Campus Parent) MCP — multi-district",
+  "description": "Infinite Campus (Campus Parent) MCP — single-account with CUPS auto-discovery",
   "author": {
     "name": "Claude Code (AI)"
   },
@@ -15,45 +15,45 @@
         "${__dirname}/dist/bundle.js"
       ],
       "env": {
-        "IC_1_NAME": "${user_config.ic_1_name}",
-        "IC_1_BASE_URL": "${user_config.ic_1_base_url}",
-        "IC_1_DISTRICT": "${user_config.ic_1_district}",
-        "IC_1_USERNAME": "${user_config.ic_1_username}",
-        "IC_1_PASSWORD": "${user_config.ic_1_password}"
+        "IC_BASE_URL": "${user_config.ic_base_url}",
+        "IC_DISTRICT": "${user_config.ic_district}",
+        "IC_USERNAME": "${user_config.ic_username}",
+        "IC_PASSWORD": "${user_config.ic_password}",
+        "IC_NAME": "${user_config.ic_name}"
       }
     }
   },
   "user_config": {
-    "ic_1_name": {
+    "ic_base_url": {
       "type": "string",
-      "title": "District 1 nickname",
-      "description": "Short friendly name for this district (e.g. \"Springfield\"). Used as the `district` argument on tool calls.",
-      "required": true
-    },
-    "ic_1_base_url": {
-      "type": "string",
-      "title": "District 1 base URL (https://...)",
+      "title": "Portal base URL (https://...)",
       "description": "Campus Parent portal base URL, e.g. https://campus.springfield.k12.example.us",
       "required": true
     },
-    "ic_1_district": {
+    "ic_district": {
       "type": "string",
-      "title": "District 1 app name",
+      "title": "District app name",
       "description": "Infinite Campus district app name (the appName path segment in the portal URL).",
       "required": true
     },
-    "ic_1_username": {
+    "ic_username": {
       "type": "string",
-      "title": "District 1 username",
-      "description": "Campus Parent portal username for this district.",
+      "title": "Username",
+      "description": "Campus Parent portal username.",
       "required": true
     },
-    "ic_1_password": {
+    "ic_password": {
       "type": "string",
-      "title": "District 1 password",
-      "description": "Campus Parent portal password for this district.",
+      "title": "Password",
+      "description": "Campus Parent portal password.",
       "required": true,
       "sensitive": true
+    },
+    "ic_name": {
+      "type": "string",
+      "title": "Display name (optional)",
+      "description": "Friendly name for the district (e.g. \"Springfield\"). Defaults to the district app name if not set.",
+      "required": false
     }
   }
 }

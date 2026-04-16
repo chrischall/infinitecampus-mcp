@@ -5,12 +5,14 @@ import { join } from 'path';
 import { ICClient } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
-const accounts: Account[] = [
-  { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka',
-    username: 'u', password: 'p' },
-  { name: 'mpls', baseUrl: 'https://mpls.infinitecampus.org', district: 'mpls',
-    username: 'u', password: 'p' },
-];
+const primaryAccount: Account = {
+  name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka',
+  username: 'u', password: 'p',
+};
+const mplsAccount: Account = {
+  name: 'mpls', baseUrl: 'https://mpls.infinitecampus.org', district: 'mpls',
+  username: 'u', password: 'p',
+};
 
 /** Mock response for the CUPS linkedAccounts call that returns no linked accounts. */
 function noLinkedAccounts() {
@@ -21,11 +23,10 @@ function noLinkedAccounts() {
 }
 
 describe('ICClient.listDistricts', () => {
-  it('returns name + baseUrl + linked for each configured account, no creds', () => {
-    const client = new ICClient(accounts);
+  it('returns name + baseUrl + linked for the configured account, no creds', () => {
+    const client = new ICClient(primaryAccount);
     expect(client.listDistricts()).toEqual([
       { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', linked: false },
-      { name: 'mpls', baseUrl: 'https://mpls.infinitecampus.org', linked: false },
     ]);
   });
 });
@@ -55,7 +56,7 @@ describe('ICClient.request — login + GET', () => {
   }
 
   it('logs in lazily on first request, reuses cookie on second', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     mockLoginThenGet({ ok: true });
 
     const result = await client.request<{ ok: boolean }>('anoka', '/campus/api/portal/parents/students');
@@ -73,7 +74,7 @@ describe('ICClient.request — login + GET', () => {
   });
 
   it('throws UnknownDistrictError when district not configured', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('nope', '/x')).rejects.toThrow(/Unknown district 'nope'/);
   });
 });
@@ -102,7 +103,7 @@ describe('ICClient.request — retry + concurrency', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const result = await client.request('anoka', '/x');
     expect(result).toEqual({ ok: true });
     expect(fetchSpy).toHaveBeenCalledTimes(6);
@@ -117,7 +118,7 @@ describe('ICClient.request — retry + concurrency', () => {
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response('', { status: 401 }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Session expired/);
   });
 
@@ -137,7 +138,7 @@ describe('ICClient.request — retry + concurrency', () => {
       });
     });
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await Promise.all([
       client.request('anoka', '/x'),
       client.request('anoka', '/y'),
@@ -146,29 +147,6 @@ describe('ICClient.request — retry + concurrency', () => {
     expect(loginCount).toBe(1);
   });
 
-  it('logs in independently for each district', async () => {
-    let loginCount = 0;
-    fetchSpy.mockImplementation(async (url) => {
-      const u = String(url);
-      if (u.includes('/verify.jsp')) {
-        loginCount++;
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
-      }
-      if (u.includes('/cups/linkedAccounts')) {
-        return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ ok: 1 }), {
-        status: 200, headers: { 'content-type': 'application/json' },
-      });
-    });
-
-    const client = new ICClient(accounts);
-    await Promise.all([
-      client.request('anoka', '/x'),
-      client.request('mpls', '/y'),
-    ]);
-    expect(loginCount).toBe(2);
-  });
 });
 
 describe('ICClient.request — error paths', () => {
@@ -179,21 +157,21 @@ describe('ICClient.request — error paths', () => {
   it('throws AuthFailedError when login POST returns 4xx without cookie', async () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 401 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
   it('throws AuthFailedError when login POST returns 200 with password-error', async () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('<div class="password-error">Invalid credentials</div>', { status: 200 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
   it('throws PortalUnreachableError when login POST returns 5xx', async () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 502 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
   });
 
@@ -202,7 +180,7 @@ describe('ICClient.request — error paths', () => {
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response('', { status: 500 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
   });
 
@@ -211,7 +189,7 @@ describe('ICClient.request — error paths', () => {
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response('', { status: 404, statusText: 'Not Found' }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/IC 404/);
   });
 
@@ -220,7 +198,7 @@ describe('ICClient.request — error paths', () => {
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response('', { status: 200 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const result = await client.request('anoka', '/x');
     expect(result).toBeNull();
   });
@@ -244,7 +222,7 @@ describe('ICClient.request — error paths', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/x');
 
     // Force expiry: mutate session loggedInAt via Date.now spy
@@ -259,7 +237,7 @@ describe('ICClient.request — error paths', () => {
   it('throws AuthFailedError when login POST returns no cookie', async () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 200 })); // no cookie
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
@@ -268,7 +246,7 @@ describe('ICClient.request — error paths', () => {
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response('', { status: 404 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const { mkdtemp, rm } = await import('fs/promises');
     const { tmpdir } = await import('os');
     const { join } = await import('path');
@@ -281,7 +259,7 @@ describe('ICClient.request — error paths', () => {
   });
 
   it('download throws UnknownDistrictError for unknown district', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.download('nope', '/x', '/tmp/foo.pdf')).rejects.toThrow(/Unknown district/);
   });
 
@@ -295,7 +273,7 @@ describe('ICClient.request — error paths', () => {
     const { join } = await import('path');
     const dir = await mkdtemp(join(tmpdir(), 'ic-dl-'));
     try {
-      const client = new ICClient(accounts);
+      const client = new ICClient(primaryAccount);
       const meta = await client.download('anoka', '/x', join(dir, 'a.bin'));
       expect(meta.contentType).toBe('application/octet-stream');
     } finally {
@@ -307,7 +285,7 @@ describe('ICClient.request — error paths', () => {
     // Covers the no-cookie branch in parseSetCookies
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 200 }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
@@ -324,7 +302,7 @@ describe('ICClient.request — error paths', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
 
     // Verify the data request (3rd fetch call) does NOT have X-XSRF-TOKEN
@@ -350,7 +328,7 @@ describe('ICClient.request — error paths', () => {
     const { join } = await import('path');
     const tmpDir = await mkdtemp(join(tmpdir(), 'ic-xsrf-'));
     try {
-      const client = new ICClient(accounts);
+      const client = new ICClient(primaryAccount);
       await client.download('anoka', '/campus/doc', join(tmpDir, 'test.pdf'));
 
       // Verify the download request (3rd fetch call) does NOT have X-XSRF-TOKEN
@@ -388,7 +366,7 @@ describe('ICClient.request — error paths', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const result = await client.request('anoka', '/campus/api/test');
     expect(result).toEqual({ ok: true });
 
@@ -416,7 +394,7 @@ describe('ICClient.request — error paths', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const result = await client.request('anoka', '/x');
     expect(result).toEqual({ ok: true });
   });
@@ -437,7 +415,7 @@ describe('ICClient.download', () => {
         headers: { 'content-type': 'application/pdf' },
       }));
 
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const dest = join(dir, 'report.pdf');
     const meta = await client.download('anoka', '/campus/path/to/doc', dest);
 
@@ -446,19 +424,19 @@ describe('ICClient.download', () => {
   });
 
   it('throws InvalidPath when destination is a directory', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/InvalidPath|destinationPath/);
   });
 
   it('throws ParentDirectoryMissing when parent dir does not exist', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', join(dir, 'nope', 'x.pdf'))).rejects.toThrow(/ParentDirectoryMissing/);
   });
 
   it('throws FileExists when file is present and overwrite not set', async () => {
     const dest = join(dir, 'r.pdf');
     await fsWriteFile(dest, 'hi');
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', dest)).rejects.toThrow(/FileExists/);
   });
 
@@ -483,7 +461,7 @@ describe('ICClient.download', () => {
         status: 200, headers: { 'content-type': 'application/pdf' },
       }));
     const dest = join(dir, 'xsrf.pdf');
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const meta = await client.download('anoka', '/x', dest);
     expect(meta.bytes).toBe(2);
     // Verify the download fetch included X-XSRF-TOKEN
@@ -502,7 +480,7 @@ describe('ICClient.download', () => {
       }));
     const dest = join(dir, 'r.pdf');
     await fsWriteFile(dest, 'old');
-    const client = new ICClient(accounts);
+    const client = new ICClient(primaryAccount);
     const meta = await client.download('anoka', '/x', dest, { overwrite: true });
     expect(meta.bytes).toBe(3);
   });
@@ -565,7 +543,7 @@ describe('ICClient — CUPS linked district discovery', () => {
   it('discovers and authenticates a linked district on login', async () => {
     fetchSpy.mockImplementation(cupsHappyPathHandler());
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     const result = await client.request<{ data: string }>('anoka', '/campus/api/test');
     expect(result).toEqual({ data: 'ok' });
 
@@ -592,7 +570,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(1);
   });
@@ -601,7 +579,7 @@ describe('ICClient — CUPS linked district discovery', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchSpy.mockImplementation(cupsHappyPathHandler({ tokenFail: true }));
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
 
     // Primary district works, linked not discovered
@@ -614,7 +592,7 @@ describe('ICClient — CUPS linked district discovery', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchSpy.mockImplementation(cupsHappyPathHandler({ verifyBody: '<AUTHENTICATION>type-mismatch</AUTHENTICATION>' }));
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
 
     expect(client.listDistricts()).toHaveLength(1);
@@ -626,7 +604,7 @@ describe('ICClient — CUPS linked district discovery', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     fetchSpy.mockImplementation(cupsHappyPathHandler({ verifyBody: '<AUTHENTICATION>success</AUTHENTICATION>', verifyCookies: false }));
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
 
     expect(client.listDistricts()).toHaveLength(1);
@@ -682,7 +660,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     // First request on primary triggers login + CUPS discovery
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(2);
@@ -725,7 +703,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(linkedAccountsFetchCount).toBe(1); // initial discovery
 
@@ -746,7 +724,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(1);
   });
@@ -769,7 +747,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(1);
   });
@@ -799,7 +777,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     // Should not throw despite network error in CUPS flow
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(1);
@@ -838,7 +816,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(linkedAccountsFetchCount).toBe(1);
     expect(client.listDistricts()).toHaveLength(2);
@@ -879,7 +857,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('string-error'));
     errorSpy.mockRestore();
@@ -900,7 +878,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('42'));
     errorSpy.mockRestore();
@@ -950,7 +928,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(3);
 
@@ -958,74 +936,6 @@ describe('ICClient — CUPS linked district discovery', () => {
     const result = await client.request<{ data: string }>('district2', '/campus/api/test');
     expect(result).toEqual({ data: 'ok' });
     expect(client.listDistricts()).toHaveLength(3);
-  });
-
-  it('does not invalidate linked sessions from a different primary on 401', async () => {
-    // Covers line 255 false branch: linked districts from different primaries.
-    // 401 on a linked district of primary A should NOT invalidate linked districts of primary B.
-    const linkedForMpls = {
-      districtName: 'district4',
-      clientId: 'client4',
-      districtLoginUrl: 'https://d4.infinitecampus.org/campus/verify.jsp',
-      appName: 'district4app',
-      userId: 44,
-      state: 'ACTIVE',
-    };
-    let d2DataCalls = 0;
-
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
-      const u = String(url);
-      // Primary login for anoka
-      if (u.includes('anoka.infinitecampus.org/campus/verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=p-anoka; Path=/' } });
-      }
-      // Primary login for mpls
-      if (u.includes('mpls.infinitecampus.org/campus/verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=p-mpls; Path=/' } });
-      }
-      // CUPS linkedAccounts for anoka
-      if (u.includes('anoka.infinitecampus.org') && u.includes('/cups/linkedAccounts')) {
-        return new Response(JSON.stringify({ accounts: [linkedAccount] }), { status: 200 });
-      }
-      // CUPS linkedAccounts for mpls
-      if (u.includes('mpls.infinitecampus.org') && u.includes('/cups/linkedAccounts')) {
-        return new Response(JSON.stringify({ accounts: [linkedForMpls] }), { status: 200 });
-      }
-      if (u.includes('/cups/loginToken')) {
-        return new Response(JSON.stringify({ token: { token: 'jwt' } }), { status: 200 });
-      }
-      if (u.includes('/userAccountSwitch/originalDistrict')) {
-        return new Response(JSON.stringify({ clientID: 'c' }), { status: 200 });
-      }
-      if (u.includes('/districts/current')) {
-        return new Response(JSON.stringify({ name: 'P' }), { status: 200 });
-      }
-      if (u.includes('d2.infinitecampus.org/campus/verify.jsp') || u.includes('d4.infinitecampus.org/campus/verify.jsp')) {
-        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
-          status: 200,
-          headers: { 'set-cookie': 'JSESSIONID=l; Path=/' },
-        });
-      }
-      // Data on d2 (anoka's linked) — first 401, then ok
-      if (u.includes('d2.infinitecampus.org')) {
-        d2DataCalls++;
-        if (d2DataCalls === 1) return new Response('', { status: 401 });
-        return new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
-      }
-      return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
-    });
-
-    const client = new ICClient(accounts); // anoka + mpls
-    // Login both primaries and discover their linked districts
-    await client.request('anoka', '/campus/api/test');
-    await client.request('mpls', '/campus/api/test');
-    expect(client.listDistricts()).toHaveLength(4); // anoka, mpls, district2, district4
-
-    // 401 on district2 (anoka's linked) should only invalidate anoka's linked, not mpls's
-    const result = await client.request<{ data: string }>('district2', '/campus/api/test');
-    expect(result).toEqual({ data: 'ok' });
-    // All 4 districts should still be present after re-auth
-    expect(client.listDistricts()).toHaveLength(4);
   });
 
   it('logs top-level discoverLinkedDistricts exception without failing login', async () => {
@@ -1042,7 +952,7 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient([accounts[0]]);
+    const client = new ICClient(primaryAccount);
     // Should not throw
     await client.request('anoka', '/campus/api/test');
     expect(client.listDistricts()).toHaveLength(1);

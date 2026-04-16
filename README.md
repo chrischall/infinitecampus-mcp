@@ -1,6 +1,6 @@
 # infinitecampus-mcp
 
-MCP server for Infinite Campus (Campus Parent portal). Multi-district support — a parent of kids in different districts can query and act across all of them from one MCP instance.
+MCP server for Infinite Campus (Campus Parent portal). Single-account config — linked districts are auto-discovered via CUPS SSO after login.
 
 ## Tools
 
@@ -21,17 +21,19 @@ Tools that the harness will gate as write/IO operations: `ic_send_message`, `ic_
 
 ## Configuration
 
-Set numbered env vars per district. The loader scans `IC_1_*`, `IC_2_*`, … until it hits a gap, so accounts must be sequential.
+Set a single set of env vars for your primary Infinite Campus account:
 
 ```
-IC_1_NAME=anoka
-IC_1_BASE_URL=https://anoka.infinitecampus.org
-IC_1_DISTRICT=anoka
-IC_1_USERNAME=parent@example.com
-IC_1_PASSWORD=...
+IC_BASE_URL=https://campus.springfield.k12.example.us
+IC_DISTRICT=springfield
+IC_USERNAME=parent@example.com
+IC_PASSWORD=...
+IC_NAME=Springfield           # optional, defaults to IC_DISTRICT
 ```
 
-Add `IC_2_*`, `IC_3_*` for additional districts. See `.env.example`.
+Linked districts (via CUPS SSO) are auto-discovered after login — no extra config needed. If you have truly separate IC instances with different credentials, run two MCP instances.
+
+See `.env.example`.
 
 ## Status
 

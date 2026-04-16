@@ -31,8 +31,8 @@ export class ICClient {
   private sessions = new Map<string, Session>();
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
 
-  constructor(accounts: Account[]) {
-    for (const a of accounts) this.accounts.set(a.name, a);
+  constructor(account: Account) {
+    this.accounts.set(account.name, account);
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -249,10 +249,10 @@ export class ICClient {
 
       const primaryName = this.linkedTo.get(account.name);
       if (primaryName) {
-        // Linked district 401: invalidate primary so re-login discovers linked districts again
+        // Linked district 401: invalidate primary + all linked sessions so re-login rediscovers
         this.sessions.delete(primaryName);
-        for (const [linked, primary] of this.linkedTo) {
-          if (primary === primaryName) this.sessions.delete(linked);
+        for (const [linked] of this.linkedTo) {
+          this.sessions.delete(linked);
         }
         const primaryAccount = this.accounts.get(primaryName)!;
         await this.ensureSession(primaryAccount);
@@ -322,7 +322,7 @@ export class UnknownDistrictError extends Error {
 
 export class AuthFailedError extends Error {
   constructor(public district: string) {
-    super(`Login failed for district '${district}'. Check IC_N_USERNAME and IC_N_PASSWORD.`);
+    super(`Login failed for district '${district}'. Check IC_USERNAME and IC_PASSWORD.`);
     this.name = 'AuthFailedError';
   }
 }

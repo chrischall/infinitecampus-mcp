@@ -4,11 +4,11 @@ import { ICClient } from '../../src/client.js';
 import { registerAttendanceTools } from '../../src/tools/attendance.js';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }> }>;
-const accounts = [{ name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' }];
+const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 let handlers: Map<string, ToolHandler>;
 
 function setup(returnValue: unknown) {
-  const client = new ICClient(accounts);
+  const client = new ICClient(account);
   vi.spyOn(client, 'request').mockResolvedValue(returnValue);
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();
@@ -39,7 +39,7 @@ describe('ic_list_attendance', () => {
   });
 
   it('returns FeatureDisabled warning on 404', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(account);
     vi.spyOn(client, 'request').mockImplementation(async () => { throw new Error('IC 404 Not Found for /x'); });
     const server = new McpServer({ name: 'test', version: '0.0.0' });
     handlers = new Map();
@@ -53,7 +53,7 @@ describe('ic_list_attendance', () => {
   });
 
   it('rethrows non-404 errors', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(account);
     vi.spyOn(client, 'request').mockImplementation(async () => { throw new Error('IC 500'); });
     const server = new McpServer({ name: 'test', version: '0.0.0' });
     handlers = new Map();

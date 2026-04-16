@@ -4,12 +4,12 @@ import { ICClient } from '../../src/client.js';
 import { registerScheduleTools } from '../../src/tools/schedule.js';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }> }>;
-const accounts = [{ name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' }];
+const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 
 let handlers: Map<string, ToolHandler>;
 
 function setup(returnValue: unknown) {
-  const client = new ICClient(accounts);
+  const client = new ICClient(account);
   vi.spyOn(client, 'request').mockResolvedValue(returnValue);
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();

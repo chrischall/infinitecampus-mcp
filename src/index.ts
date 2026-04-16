@@ -14,7 +14,7 @@ try {
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadAccounts } from './config.js';
+import { loadAccount } from './config.js';
 import { ICClient } from './client.js';
 import { registerDistrictTools } from './tools/districts.js';
 import { registerStudentTools } from './tools/students.js';
@@ -27,8 +27,8 @@ import { registerFoodServiceTools } from './tools/foodservice.js';
 import { registerMessageTools } from './tools/messages.js';
 import { registerDocumentTools } from './tools/documents.js';
 
-const accounts = loadAccounts();
-const client = new ICClient(accounts);
+const account = loadAccount();
+const client = new ICClient(account);
 const server = new McpServer({ name: 'infinitecampus', version: '0.1.1' });
 
 registerDistrictTools(server, client);
@@ -42,7 +42,7 @@ registerFoodServiceTools(server, client);
 registerMessageTools(server, client);
 registerDocumentTools(server, client);
 
-console.error(`[infinitecampus-mcp] Loaded ${accounts.length} district(s): ${accounts.map((a) => a.name).join(', ')}`);
+console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
 console.error('[infinitecampus-mcp] Developed and maintained by AI (Claude). Use at your own discretion.');
 
 const transport = new StdioServerTransport();

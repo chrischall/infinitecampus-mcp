@@ -7,7 +7,7 @@ import { ICClient } from '../../src/client.js';
 import { registerDocumentTools } from '../../src/tools/documents.js';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }> }>;
-const accounts = [{ name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' }];
+const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 let handlers: Map<string, ToolHandler>;
 
 function setup(client: ICClient) {
@@ -22,7 +22,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('ic_list_documents', () => {
   it('returns document metadata array', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(account);
     vi.spyOn(client, 'request').mockResolvedValue([
       { id: 'd1', type: 'reportCard', date: '2026-03-15', downloadUrl: '/x.pdf' },
     ]);
@@ -40,7 +40,7 @@ describe('ic_download_document', () => {
   afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
   it('calls client.download with the document URL and destinationPath', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(account);
     vi.spyOn(client, 'download').mockResolvedValue({
       path: join(dir, 'r.pdf'), bytes: 100, contentType: 'application/pdf',
     });
@@ -57,7 +57,7 @@ describe('ic_download_document', () => {
   });
 
   it('passes overwrite:true through', async () => {
-    const client = new ICClient(accounts);
+    const client = new ICClient(account);
     vi.spyOn(client, 'download').mockResolvedValue({
       path: 'p', bytes: 1, contentType: 'application/pdf',
     });
