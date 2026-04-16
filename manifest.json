@@ -20,10 +20,36 @@
     }
   },
   "user_config": {
-    "ic_1_name": { "type": "string", "title": "District 1 nickname", "required": true },
-    "ic_1_base_url": { "type": "string", "title": "District 1 base URL (https://...)", "required": true },
-    "ic_1_district": { "type": "string", "title": "District 1 app name", "required": true },
-    "ic_1_username": { "type": "string", "title": "District 1 username", "required": true },
-    "ic_1_password": { "type": "string", "title": "District 1 password", "required": true, "sensitive": true }
+    "ic_1_name": {
+      "type": "string",
+      "title": "District 1 nickname",
+      "description": "Short friendly name for this district (e.g. \"Springfield\"). Used as the `district` argument on tool calls.",
+      "required": true
+    },
+    "ic_1_base_url": {
+      "type": "string",
+      "title": "District 1 base URL (https://...)",
+      "description": "Campus Parent portal base URL, e.g. https://campus.springfield.k12.example.us",
+      "required": true
+    },
+    "ic_1_district": {
+      "type": "string",
+      "title": "District 1 app name",
+      "description": "Infinite Campus district app name (the appName path segment in the portal URL).",
+      "required": true
+    },
+    "ic_1_username": {
+      "type": "string",
+      "title": "District 1 username",
+      "description": "Campus Parent portal username for this district.",
+      "required": true
+    },
+    "ic_1_password": {
+      "type": "string",
+      "title": "District 1 password",
+      "description": "Campus Parent portal password for this district.",
+      "required": true,
+      "sensitive": true
+    }
   }
 }

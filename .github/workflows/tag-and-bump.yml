@@ -1,0 +1,67 @@
+name: Tag & Bump
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  tag-and-bump:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          # PAT required — GITHUB_TOKEN pushes don't trigger other workflows
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - uses: actions/setup-node@v6.3.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Tag the current commit with the current version
+      - name: Tag current version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          git tag "v${CURRENT}"
+          echo "TAGGED_VERSION=${CURRENT}" >> "$GITHUB_ENV"
+
+      # Bump patch version in all locations
+      - name: Bump patch version
+        run: |
+          npm version patch --no-git-tag-version
+          NEXT=$(node -p "require('./package.json').version")
+          echo "NEXT_VERSION=${NEXT}" >> "$GITHUB_ENV"
+
+          # src/index.ts — MCP server version
+          sed -i "s/version: '${TAGGED_VERSION}'/version: '${NEXT}'/" src/index.ts
+
+          # manifest.json
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            m.version = '${NEXT}';
+            fs.writeFileSync('manifest.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+      - name: Verify build
+        run: npm run build
+
+      - name: Commit and push
+        run: |
+          git add -A
+          git commit -m "chore: bump version to v${NEXT_VERSION}"
+          git push origin main
+          git push origin "v${TAGGED_VERSION}"
