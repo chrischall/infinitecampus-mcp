@@ -14,8 +14,22 @@ interface RawStudent {
   enrollments?: RawEnrollment[];
 }
 
+interface RawSectionPlacement {
+  periodName?: string;
+  startTime?: string;
+  endTime?: string;
+  [key: string]: unknown;
+}
+
+interface TrimmedSectionPlacement {
+  periodName?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
 interface AttendanceEntry {
   date: string;
+  sectionPlacements?: RawSectionPlacement[] | TrimmedSectionPlacement[];
   [key: string]: unknown;
 }
 
@@ -52,9 +66,23 @@ function inRange(date: string | undefined, since?: string, until?: string): bool
   return true;
 }
 
-function filterList(list: AttendanceEntry[] | undefined, since?: string, until?: string): AttendanceEntry[] | undefined {
+function trimSectionPlacement(sp: RawSectionPlacement | TrimmedSectionPlacement): TrimmedSectionPlacement {
+  const out: TrimmedSectionPlacement = {};
+  if (sp.periodName !== undefined) out.periodName = sp.periodName;
+  if (sp.startTime !== undefined) out.startTime = sp.startTime;
+  if (sp.endTime !== undefined) out.endTime = sp.endTime;
+  return out;
+}
+
+function trimEntry(e: AttendanceEntry): AttendanceEntry {
+  if (!Array.isArray(e.sectionPlacements)) return e;
+  const sps: (RawSectionPlacement | TrimmedSectionPlacement)[] = e.sectionPlacements;
+  return { ...e, sectionPlacements: sps.map(trimSectionPlacement) };
+}
+
+function processList(list: AttendanceEntry[] | undefined, since?: string, until?: string): AttendanceEntry[] | undefined {
   if (!list) return list;
-  return list.filter((e) => inRange(e.date, since, until));
+  return list.filter((e) => inRange(e.date, since, until)).map(trimEntry);
 }
 
 export function registerAttendanceTools(server: McpServer, client: ICClient): void {
@@ -82,21 +110,17 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
         );
         const entries = Array.isArray(data) ? data : [data];
         for (const entry of entries) {
-          if (args.since || args.until) {
-            const trimmedTerms = (entry.terms ?? []).map((t) => ({
-              ...t,
-              courses: (t.courses ?? []).map((c) => ({
-                ...c,
-                absentList: filterList(c.absentList, args.since, args.until),
-                tardyList: filterList(c.tardyList, args.since, args.until),
-                presentList: filterList(c.presentList, args.since, args.until),
-                earlyReleaseList: filterList(c.earlyReleaseList, args.since, args.until),
-              })),
-            }));
-            results.push({ ...entry, terms: trimmedTerms });
-          } else {
-            results.push(entry);
-          }
+          const trimmedTerms = (entry.terms ?? []).map((t) => ({
+            ...t,
+            courses: (t.courses ?? []).map((c) => ({
+              ...c,
+              absentList: processList(c.absentList, args.since, args.until),
+              tardyList: processList(c.tardyList, args.since, args.until),
+              presentList: processList(c.presentList, args.since, args.until),
+              earlyReleaseList: processList(c.earlyReleaseList, args.since, args.until),
+            })),
+          }));
+          results.push({ ...entry, terms: trimmedTerms });
         }
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }] };

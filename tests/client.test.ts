@@ -242,6 +242,32 @@ describe('ICClient.request — error paths', () => {
     expect(result).toBeNull();
   });
 
+  it('returns raw text (no JSON parsing) when responseType=text', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('<html><title>Hi</title></html>', {
+        status: 200, headers: { 'content-type': 'text/html' },
+      }));
+    const client = new ICClient(primaryAccount);
+    const result = await client.request<string>('anoka', '/campus/messageView.xsl', { responseType: 'text' });
+    expect(result).toBe('<html><title>Hi</title></html>');
+    // Verify Accept header was text-flavored
+    const dataCall = fetchSpy.mock.calls[2];
+    const headers = (dataCall[1] as RequestInit).headers as Record<string, string>;
+    expect(headers.Accept).toContain('text/html');
+  });
+
+  it('returns empty string when responseType=text and body is empty', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    const result = await client.request<string>('anoka', '/campus/empty', { responseType: 'text' });
+    expect(result).toBe('');
+  });
+
   it('re-logs in after TTL expires (existing session branch)', async () => {
     fetchSpy
       // login 1 (POST only)

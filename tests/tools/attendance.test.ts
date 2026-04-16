@@ -30,6 +30,16 @@ const STUDENT = {
   ],
 };
 
+const FULL_SP = {
+  sectionID: 368, termID: 27, periodID: 296, trialID: 50, structureID: 50,
+  startDate: '2025-10-29', endDate: '2026-01-20', courseID: 169,
+  sectionNumber: 61, crossSiteSection: false, courseNumber: '99329Y0',
+  courseName: 'Homeroom: 6-8', attendance: true, isResponsive: false,
+  periodName: 'HR', startTime: '08:05:00', endTime: '15:05:00',
+};
+
+const TRIMMED_SP = { periodName: 'HR', startTime: '08:05:00', endTime: '15:05:00' };
+
 const ATTENDANCE = {
   enrollmentID: 99001,
   terms: [
@@ -41,10 +51,10 @@ const ATTENDANCE = {
         {
           courseName: 'Math',
           absentList: [
-            { date: '2026-01-15', code: 'A', description: 'Absent' },
-            { date: '2026-03-10', code: 'A', description: 'Absent' },
+            { date: '2026-01-15', code: 'A', description: 'Absent', sectionPlacements: [FULL_SP] },
+            { date: '2026-03-10', code: 'A', description: 'Absent', sectionPlacements: [FULL_SP] },
           ],
-          tardyList: [{ date: '2026-02-20', code: 'T', description: 'Tardy' }],
+          tardyList: [{ date: '2026-02-20', code: 'T', description: 'Tardy', sectionPlacements: [FULL_SP] }],
           presentList: [],
           earlyReleaseList: [],
         },
@@ -68,7 +78,7 @@ describe('ic_list_attendance', () => {
     expect(calls[1]).toContain('personID=12345');
   });
 
-  it('returns the raw enrollment response unmodified without date filters', async () => {
+  it('returns the enrollment response (sectionPlacements trimmed) without date filters', async () => {
     setup((path) => {
       if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
       if (path.startsWith('/campus/resources/portal/attendance/99001')) return Promise.resolve(ATTENDANCE);
@@ -79,6 +89,9 @@ describe('ic_list_attendance', () => {
     expect(data).toHaveLength(1);
     expect(data[0].terms[0].courses[0].absentList).toHaveLength(2);
     expect(data[0].terms[0].courses[0].tardyList).toHaveLength(1);
+    // sectionPlacements trimmed to { periodName, startTime, endTime } only
+    expect(data[0].terms[0].courses[0].absentList[0].sectionPlacements).toEqual([TRIMMED_SP]);
+    expect(data[0].terms[0].courses[0].tardyList[0].sectionPlacements).toEqual([TRIMMED_SP]);
   });
 
   it('handles array-wrapped response from endpoint', async () => {
@@ -104,8 +117,8 @@ describe('ic_list_attendance', () => {
     });
     const data = JSON.parse(result.content[0].text);
     const course = data[0].terms[0].courses[0];
-    expect(course.absentList).toEqual([{ date: '2026-03-10', code: 'A', description: 'Absent' }]);
-    expect(course.tardyList).toEqual([{ date: '2026-02-20', code: 'T', description: 'Tardy' }]);
+    expect(course.absentList).toEqual([{ date: '2026-03-10', code: 'A', description: 'Absent', sectionPlacements: [TRIMMED_SP] }]);
+    expect(course.tardyList).toEqual([{ date: '2026-02-20', code: 'T', description: 'Tardy', sectionPlacements: [TRIMMED_SP] }]);
   });
 
   it('only since provided filters from that date forward', async () => {
@@ -132,7 +145,7 @@ describe('ic_list_attendance', () => {
     });
     const data = JSON.parse(result.content[0].text);
     expect(data[0].terms[0].courses[0].absentList).toEqual([
-      { date: '2026-01-15', code: 'A', description: 'Absent' },
+      { date: '2026-01-15', code: 'A', description: 'Absent', sectionPlacements: [TRIMMED_SP] },
     ]);
   });
 
@@ -209,6 +222,32 @@ describe('ic_list_attendance', () => {
     const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
     const data = JSON.parse(result.content[0].text);
     expect(data).toEqual([]);
+  });
+
+  it('omits undefined periodName/startTime/endTime fields in trimmed sectionPlacements', async () => {
+    const sparseSp = {
+      enrollmentID: 99001,
+      terms: [{
+        termID: 1,
+        courses: [{
+          courseName: 'Sparse',
+          absentList: [
+            { date: '2026-04-01', code: 'A', sectionPlacements: [{ sectionID: 1, courseName: 'X' }] }, // no period fields
+            { date: '2026-04-02', code: 'A', sectionPlacements: [{ periodName: 'P1' }] }, // only periodName
+          ],
+        }],
+      }],
+    };
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.startsWith('/campus/resources/portal/attendance/99001')) return Promise.resolve(sparseSp);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    const list = data[0].terms[0].courses[0].absentList;
+    expect(list[0].sectionPlacements).toEqual([{}]); // all three fields absent → empty object
+    expect(list[1].sectionPlacements).toEqual([{ periodName: 'P1' }]);
   });
 
   it('filters list entries with missing/non-string date fields (kept as-is)', async () => {

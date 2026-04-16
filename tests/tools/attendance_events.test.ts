@@ -28,6 +28,16 @@ const STUDENT = {
   ],
 };
 
+const FULL_SP = {
+  sectionID: 368, termID: 27, periodID: 296, trialID: 50, structureID: 50,
+  startDate: '2025-10-29', endDate: '2026-01-20', courseID: 169,
+  sectionNumber: 61, crossSiteSection: false, courseNumber: '99329Y0',
+  courseName: 'Homeroom: 6-8', attendance: true, isResponsive: false,
+  periodName: 'HR', startTime: '08:05:00', endTime: '15:05:00',
+};
+
+const TRIMMED_SP = { periodName: 'HR', startTime: '08:05:00', endTime: '15:05:00' };
+
 const EVENTS_RESPONSE = {
   calendarID: 5592,
   calendarName: '25-26 Scholars Academy 3-8',
@@ -47,7 +57,7 @@ const EVENTS_RESPONSE = {
       comments: 'Doctor appointment', termID: 27, status: 'T', periodID: 296,
       modifiedDate: '2025-11-13T10:00:00', wholeDayAbsence: false,
       _id: 'x', _model: 'evt', _hashCode: 123, mTime: 't', action: 'none',
-      sectionPlacements: [], pairID: null, pairedEvent: null, crossSiteTransfer: false,
+      sectionPlacements: [FULL_SP], pairID: null, pairedEvent: null, crossSiteTransfer: false,
       isKentucky: false,
     },
     {
@@ -101,10 +111,15 @@ describe('ic_list_attendance_events', () => {
       code: '1L', description: 'Excused Tardy', excuse: 'E', excuseType: 'Tardy',
       comments: 'Doctor appointment', termID: 27, status: 'T', periodID: 296,
       modifiedDate: '2025-11-13T10:00:00', wholeDayAbsence: false,
+      sectionPlacements: [TRIMMED_SP],
     });
     expect(first).not.toHaveProperty('_id');
     expect(first).not.toHaveProperty('pairID');
-    expect(first).not.toHaveProperty('sectionPlacements');
+    // sectionPlacements is kept but trimmed — original noisy fields gone
+    expect(first.sectionPlacements[0]).not.toHaveProperty('sectionID');
+    expect(first.sectionPlacements[0]).not.toHaveProperty('courseName');
+    // Events without sectionPlacements still drop the field entirely
+    expect(data[0].events[1]).not.toHaveProperty('sectionPlacements');
   });
 
   it('handles array-wrapped response', async () => {
@@ -169,6 +184,31 @@ describe('ic_list_attendance_events', () => {
     });
     const data = JSON.parse(result.content[0].text);
     expect(data[0].events.map((e: { attendanceID: number }) => e.attendanceID)).toEqual([9154, 9156]);
+  });
+
+  it('omits undefined periodName/startTime/endTime fields in trimmed sectionPlacements', async () => {
+    const sparse = {
+      ...EVENTS_RESPONSE,
+      events: [
+        {
+          attendanceID: 500, localDate: '2026-04-01', code: 'A',
+          sectionPlacements: [{ sectionID: 1, courseName: 'X' }], // no period fields
+        },
+        {
+          attendanceID: 501, localDate: '2026-04-02', code: 'A',
+          sectionPlacements: [{ periodName: 'P1' }], // only periodName
+        },
+      ],
+    };
+    setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      if (path.startsWith('/campus/resources/portal/attendance/events')) return Promise.resolve(sparse);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_attendance_events')!({ district: 'anoka', studentId: '12345' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data[0].events[0].sectionPlacements).toEqual([{}]);
+    expect(data[0].events[1].sectionPlacements).toEqual([{ periodName: 'P1' }]);
   });
 
   it('filters out events missing localDate when since/until are set', async () => {

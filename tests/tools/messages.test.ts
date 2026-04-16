@@ -19,18 +19,6 @@ function setup(impl: (path: string) => Promise<unknown>) {
   return client;
 }
 
-function setupSingle(returnValue: unknown) {
-  const client = new ICClient(account);
-  vi.spyOn(client, 'request').mockResolvedValue(returnValue);
-  const server = new McpServer({ name: 'test', version: '0.0.0' });
-  handlers = new Map();
-  vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
-    handlers.set(name, cb as ToolHandler); return undefined as never;
-  });
-  registerMessageTools(server, client);
-  return client;
-}
-
 afterEach(() => vi.restoreAllMocks());
 
 const PRISM_ITEM = {
@@ -280,10 +268,150 @@ describe('ic_list_messages', () => {
 });
 
 describe('ic_get_message', () => {
-  it('calls prism unviewed count endpoint', async () => {
-    const client = setupSingle({ status: 'OK', data: { RecentNotifications: { count: '5' } } });
-    await handlers.get('ic_get_message')!({ district: 'anoka' });
-    const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
-    expect(url).toContain('NotificationUser-countUnviewed');
+  const SAMPLE_HTML = [
+    '<html>',
+    '<head><title>Message -- Scholars Academy Closed 2/3/26</title></head>',
+    '<body>',
+    '<script>alert("ignored")</script>',
+    '<style>body{color:red}</style>',
+    '<p>Message: Scholars Academy Closed 2/3/26</p>',
+    '<p>Date: 02/02/2026</p>',
+    '<div>Dear Scholars &amp; Community,&nbsp;Due to weather, no school on 2/3.</div>',
+    '</body></html>',
+  ].join('');
+
+  it('fetches HTML as text and returns parsed { subject, date, body, url }', async () => {
+    const client = new ICClient(account);
+    const requestSpy = vi.spyOn(client, 'request').mockResolvedValue(SAMPLE_HTML);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_get_message')!({
+      district: 'anoka',
+      messageUrl: 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=100&messageRecipientID=200&processMessageID=300',
+    });
+
+    // The request should have been made with responseType=text
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    const [, reqPath, reqOpts] = requestSpy.mock.calls[0];
+    expect(reqPath).toBe('/campus/portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=100&messageRecipientID=200&processMessageID=300');
+    expect(reqOpts).toEqual({ responseType: 'text' });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.subject).toBe('Scholars Academy Closed 2/3/26');
+    expect(parsed.date).toBe('02/02/2026');
+    expect(parsed.body).toContain('Dear Scholars & Community');
+    expect(parsed.body).toContain('no school on 2/3');
+    expect(parsed.body).not.toContain('Date:');
+    expect(parsed.body).not.toContain('alert(');
+    expect(parsed.body).not.toContain('color:red');
+    expect(parsed.url).toBe('/campus/portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=100&messageRecipientID=200&processMessageID=300');
+  });
+
+  it("passes through messageUrl that already starts with /campus/", async () => {
+    const client = new ICClient(account);
+    const requestSpy = vi.spyOn(client, 'request').mockResolvedValue(SAMPLE_HTML);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    await handlers.get('ic_get_message')!({
+      district: 'anoka',
+      messageUrl: '/campus/portal/messageView.xsl?x=y',
+    });
+    expect(requestSpy.mock.calls[0][1]).toBe('/campus/portal/messageView.xsl?x=y');
+  });
+
+  it("prefixes a leading slash-only path (/foo) with /campus", async () => {
+    const client = new ICClient(account);
+    const requestSpy = vi.spyOn(client, 'request').mockResolvedValue(SAMPLE_HTML);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    await handlers.get('ic_get_message')!({
+      district: 'anoka',
+      messageUrl: '/portal/messageView.xsl?x=y',
+    });
+    expect(requestSpy.mock.calls[0][1]).toBe('/campus/portal/messageView.xsl?x=y');
+  });
+
+  it('handles title without "Message -- " prefix (uses title as-is)', async () => {
+    const html = '<html><title>Raw Subject</title><body>Date: 01/02/2026 Body goes here</body></html>';
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue(html);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_get_message')!({ district: 'anoka', messageUrl: 'portal/messageView.xsl' });
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.subject).toBe('Raw Subject');
+    expect(parsed.date).toBe('01/02/2026');
+    expect(parsed.body).toBe('Body goes here');
+  });
+
+  it('handles body with no Date: line (full text becomes the body)', async () => {
+    const html = '<html><title>Message -- NoDate</title><body>Just a note, no date line.</body></html>';
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue(html);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_get_message')!({ district: 'anoka', messageUrl: 'portal/messageView.xsl' });
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.subject).toBe('NoDate');
+    expect(parsed.date).toBeNull();
+    expect(parsed.body).toContain('Just a note, no date line.');
+  });
+
+  it('handles HTML with no <title> at all (empty subject)', async () => {
+    const html = '<html><body>Date: 03/04/2026 Body.</body></html>';
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue(html);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_get_message')!({ district: 'anoka', messageUrl: 'portal/messageView.xsl' });
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.subject).toBe('');
+    expect(parsed.date).toBe('03/04/2026');
+    expect(parsed.body).toBe('Body.');
+  });
+
+  it('handles empty response body gracefully', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue(null);
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    handlers = new Map();
+    vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+      handlers.set(name, cb as ToolHandler); return undefined as never;
+    });
+    registerMessageTools(server, client);
+
+    const result = await handlers.get('ic_get_message')!({ district: 'anoka', messageUrl: 'portal/messageView.xsl' });
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toEqual({ subject: '', date: null, body: '', url: '/campus/portal/messageView.xsl' });
   });
 });

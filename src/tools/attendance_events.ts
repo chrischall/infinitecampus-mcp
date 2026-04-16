@@ -14,6 +14,19 @@ interface RawStudent {
   enrollments?: RawEnrollment[];
 }
 
+interface RawSectionPlacement {
+  periodName?: string;
+  startTime?: string;
+  endTime?: string;
+  [key: string]: unknown;
+}
+
+interface TrimmedSectionPlacement {
+  periodName?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
 interface RawEvent {
   attendanceID?: number;
   date?: string;
@@ -28,6 +41,7 @@ interface RawEvent {
   periodID?: number;
   modifiedDate?: string;
   wholeDayAbsence?: boolean;
+  sectionPlacements?: RawSectionPlacement[];
   [key: string]: unknown;
 }
 
@@ -57,6 +71,7 @@ interface TrimmedEvent {
   periodID?: number;
   modifiedDate?: string;
   wholeDayAbsence?: boolean;
+  sectionPlacements?: TrimmedSectionPlacement[];
   [key: string]: unknown;
 }
 
@@ -91,11 +106,22 @@ const ENROLLMENT_KEYS: Array<keyof TrimmedEnrollmentEvents> = [
   'crossSiteEnrollment', 'endDate',
 ];
 
+function trimSectionPlacement(sp: RawSectionPlacement): TrimmedSectionPlacement {
+  const out: TrimmedSectionPlacement = {};
+  if (sp.periodName !== undefined) out.periodName = sp.periodName;
+  if (sp.startTime !== undefined) out.startTime = sp.startTime;
+  if (sp.endTime !== undefined) out.endTime = sp.endTime;
+  return out;
+}
+
 function trimEvent(e: RawEvent): TrimmedEvent {
   const out: TrimmedEvent = {};
   for (const key of EVENT_KEYS) {
     const v = e[key];
     if (v !== undefined) out[key] = v;
+  }
+  if (Array.isArray(e.sectionPlacements)) {
+    out.sectionPlacements = e.sectionPlacements.map(trimSectionPlacement);
   }
   return out;
 }

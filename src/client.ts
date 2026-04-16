@@ -24,6 +24,7 @@ export interface RequestOpts {
   method?: 'GET' | 'POST';
   body?: BodyInit;
   headers?: Record<string, string>;
+  responseType?: 'json' | 'text';
 }
 
 export class ICClient {
@@ -239,11 +240,12 @@ export class ICClient {
     account: Account, path: string, opts: RequestOpts, isRetry: boolean,
   ): Promise<T> {
     const session = this.sessions.get(account.name)!;
+    const accept = opts.responseType === 'text' ? 'text/html, text/plain, */*' : 'application/json';
     const res = await fetch(`${account.baseUrl}${path}`, {
       method: opts.method ?? 'GET',
       headers: {
         Cookie: session.cookie,
-        Accept: 'application/json',
+        Accept: accept,
         ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
         ...(opts.headers ?? {}),
       },
@@ -272,6 +274,9 @@ export class ICClient {
     if (!res.ok) throw new Error(`IC ${res.status} ${res.statusText} for ${path}`);
 
     const text = await res.text();
+    if (opts.responseType === 'text') {
+      return text as T;
+    }
     return (text ? JSON.parse(text) : null) as T;
   }
 }
