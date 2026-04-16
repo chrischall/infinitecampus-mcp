@@ -69,3 +69,93 @@ describe('ICClient.request — login + GET', () => {
     await expect(client.request('nope', '/x')).rejects.toThrow(/Unknown district 'nope'/);
   });
 });
+
+describe('ICClient.request — retry + concurrency', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('re-logs in once on 401 and retries', async () => {
+    fetchSpy
+      // First login
+      .mockResolvedValueOnce(new Response('', { status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=a; Path=/' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=b; Path=/' } }))
+      // GET returns 401
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      // Re-login
+      .mockResolvedValueOnce(new Response('', { status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=c; Path=/' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=d; Path=/' } }))
+      // Retry succeeds
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(accounts);
+    const result = await client.request('anoka', '/x');
+    expect(result).toEqual({ ok: true });
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+  });
+
+  it('throws SessionExpiredError on second 401', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=c' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=d' } }))
+      .mockResolvedValueOnce(new Response('', { status: 401 }));
+
+    const client = new ICClient(accounts);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/Session expired/);
+  });
+
+  it('shares a single in-flight login across concurrent requests to same district', async () => {
+    let loginCount = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/campus/portal/parents/')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } });
+      }
+      if (u.includes('/campus/verify.jsp')) {
+        loginCount++;
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(accounts);
+    await Promise.all([
+      client.request('anoka', '/x'),
+      client.request('anoka', '/y'),
+      client.request('anoka', '/z'),
+    ]);
+    expect(loginCount).toBe(1);
+  });
+
+  it('logs in independently for each district', async () => {
+    let loginCount = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/verify.jsp')) loginCount++;
+      if (u.endsWith('.jsp') || u.includes('/verify.jsp')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(accounts);
+    await Promise.all([
+      client.request('anoka', '/x'),
+      client.request('mpls', '/y'),
+    ]);
+    expect(loginCount).toBe(2);
+  });
+});
