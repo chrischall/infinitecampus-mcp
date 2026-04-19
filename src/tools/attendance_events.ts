@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, findStudent, studentNotFound, toArray } from './_shared.js';
+import { textContent, is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -125,6 +125,9 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
 
     const student = await findStudent(client, args.district, args.studentId);
     if (!student) return studentNotFound(args.studentId);
+
+    const disabled = await checkFeatureDisabled(client, args.district, args.studentId, student, 'attendance', 'attendance_events');
+    if (disabled) return disabled;
 
     const enrollments = student.enrollments ?? [];
     const results: TrimmedEnrollmentEvents[] = [];

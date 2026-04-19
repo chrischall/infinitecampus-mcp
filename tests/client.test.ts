@@ -465,6 +465,74 @@ describe('ICClient.request — error paths', () => {
   });
 });
 
+describe('ICClient.getFeatures', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  function mockLoginThenGet(jsonData: unknown) {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=s; Path=/' },
+      }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(JSON.stringify(jsonData), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+  }
+
+  it('fetches and caches displayOptions per (district, structureID)', async () => {
+    const flags = { attendance: true, behavior: false };
+    mockLoginThenGet(flags);
+    const client = new ICClient(primaryAccount);
+    const result = await client.getFeatures('anoka', 3917, '481');
+    expect(result).toEqual(flags);
+    // Verify the right path was hit
+    const dataCall = fetchSpy.mock.calls[2];
+    expect(String(dataCall[0])).toContain('/campus/api/portal/displayOptions/3917?personID=481');
+
+    // Second call — cache hit, no new fetch
+    const result2 = await client.getFeatures('anoka', 3917, '481');
+    expect(result2).toEqual(flags);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('re-fetches after TTL expires', async () => {
+    mockLoginThenGet({ attendance: true });
+    const client = new ICClient(primaryAccount);
+    await client.getFeatures('anoka', 3917, '481');
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+
+    // Force TTL expiry
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
+
+    // Next call will re-login (session also expired) + re-fetch displayOptions
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', {
+        status: 200, headers: { 'set-cookie': 'JSESSIONID=s2; Path=/' },
+      }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(JSON.stringify({ attendance: false }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const refreshed = await client.getFeatures('anoka', 3917, '481');
+    expect(refreshed).toEqual({ attendance: false });
+    expect(fetchSpy).toHaveBeenCalledTimes(6);
+  });
+
+  it('returns undefined for flags missing from the response', async () => {
+    mockLoginThenGet({ attendance: true });
+    const client = new ICClient(primaryAccount);
+    const features = await client.getFeatures('anoka', 3917, '481');
+    expect(features.attendance).toBe(true);
+    expect(features.nonexistent).toBeUndefined();
+  });
+});
+
 describe('ICClient.download', () => {
   let dir: string;
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-test-')); });

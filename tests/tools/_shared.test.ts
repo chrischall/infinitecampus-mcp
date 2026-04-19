@@ -7,6 +7,7 @@ import {
   findStudent,
   studentNotFound,
   toArray,
+  checkFeatureDisabled,
   type RawStudent,
 } from '../../src/tools/_shared.js';
 
@@ -124,6 +125,74 @@ describe('_shared.studentNotFound', () => {
     const result = studentNotFound('42');
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed).toEqual({ error: 'StudentNotFound', studentId: '42' });
+  });
+});
+
+describe('_shared.checkFeatureDisabled', () => {
+  const student: RawStudent = {
+    personID: 1,
+    enrollments: [{ enrollmentID: 10, calendarID: 20, structureID: 3917 }],
+  };
+
+  it('returns FeatureDisabled block when flag is explicitly false', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ behavior: false, attendance: true });
+    const result = await checkFeatureDisabled(client, 'anoka', '1', student, 'behavior', 'behavior');
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result!.content[0].text);
+    expect(parsed).toMatchObject({ warning: 'FeatureDisabled', feature: 'behavior', district: 'anoka', data: [] });
+  });
+
+  it('returns null when flag is true', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ attendance: true });
+    const result = await checkFeatureDisabled(client, 'anoka', '1', student, 'attendance', 'attendance');
+    expect(result).toBeNull();
+  });
+
+  it('returns null when flag is absent', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ unrelated: true });
+    const result = await checkFeatureDisabled(client, 'anoka', '1', student, 'fees', 'ic_list_fees');
+    expect(result).toBeNull();
+  });
+
+  it('returns null and logs when displayOptions fetch throws', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockRejectedValue(new Error('boom'));
+    const result = await checkFeatureDisabled(client, 'anoka', '1', student, 'behavior', 'behavior');
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('displayOptions check failed'));
+    errorSpy.mockRestore();
+  });
+
+  it('returns null and logs when displayOptions throws a non-Error', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockImplementation(() => { throw 'str'; });
+    const result = await checkFeatureDisabled(client, 'anoka', '1', student, 'behavior', 'behavior');
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('str'));
+    errorSpy.mockRestore();
+  });
+
+  it('returns null when student has no enrollments', async () => {
+    const client = new ICClient(account);
+    const spy = vi.spyOn(client, 'getFeatures');
+    const result = await checkFeatureDisabled(client, 'anoka', '1', { personID: 1 }, 'behavior', 'behavior');
+    expect(result).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('passes custom emptyData through to the disabled block', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ foodService: false });
+    const result = await checkFeatureDisabled(
+      client, 'anoka', '1', student, 'foodService', 'foodService', { balance: null, transactions: [] },
+    );
+    const parsed = JSON.parse(result!.content[0].text);
+    expect(parsed.data).toEqual({ balance: null, transactions: [] });
   });
 });
 

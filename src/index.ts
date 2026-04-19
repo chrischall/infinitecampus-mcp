@@ -32,6 +32,7 @@ import { registerRecentGradesTools } from './tools/recent_grades.js';
 import { registerTeacherTools } from './tools/teachers.js';
 import { registerAssessmentTools } from './tools/assessments.js';
 import { registerFeeTools } from './tools/fees.js';
+import { registerFeaturesTools } from './tools/features.js';
 
 const account = loadAccount();
 const client = new ICClient(account);
@@ -53,6 +54,7 @@ registerRecentGradesTools(server, client);
 registerTeacherTools(server, client);
 registerAssessmentTools(server, client);
 registerFeeTools(server, client);
+registerFeaturesTools(server, client);
 
 console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
 console.error('[infinitecampus-mcp] Developed and maintained by AI (Claude). Use at your own discretion.');

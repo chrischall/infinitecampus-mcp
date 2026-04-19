@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, findStudent, studentNotFound, featureDisabled, is404, toArray } from './_shared.js';
+import { textContent, findStudent, studentNotFound, featureDisabled, is404, toArray, checkFeatureDisabled } from './_shared.js';
 
 // Test item shapes vary by district and test type — we pass them through unchanged.
 type AnyTest = Record<string, unknown>;
@@ -39,6 +39,9 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
 
     const student = await findStudent(client, args.district, args.studentId);
     if (!student) return studentNotFound(args.studentId);
+
+    const disabled = await checkFeatureDisabled(client, args.district, args.studentId, student, 'assessment', 'assessments');
+    if (disabled) return disabled;
 
     const personIDEnc = encodeURIComponent(args.studentId);
     const result: AssessmentsByEnrollment[] = [];

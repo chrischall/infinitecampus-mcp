@@ -9,6 +9,8 @@ interface Session {
   loginInFlight: Promise<void> | null;
 }
 
+export interface DisplayOptions { [key: string]: boolean; }
+
 interface LinkedAccount {
   districtName: string;
   clientId: string;
@@ -32,6 +34,7 @@ export class ICClient {
   private sessions = new Map<string, Session>();
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
   private primaryName: string;
+  private featuresCache = new Map<string, { data: DisplayOptions; fetchedAt: number }>();
 
   constructor(account: Account) {
     this.accounts.set(account.name, account);
@@ -49,6 +52,25 @@ export class ICClient {
       baseUrl: a.baseUrl,
       linked: this.linkedTo.has(a.name),
     }));
+  }
+
+  /**
+   * Fetch the per-structure displayOptions feature-flag allowlist for a student.
+   * Results are cached per (district, structureID) for the duration of the
+   * session TTL — flags rarely change mid-session and the call costs ~1 RT.
+   */
+  async getFeatures(
+    district: string, structureID: number, studentId: string,
+  ): Promise<DisplayOptions> {
+    const key = `${district}:${structureID}`;
+    const cached = this.featuresCache.get(key);
+    if (cached && Date.now() - cached.fetchedAt < SESSION_TTL_MS) return cached.data;
+    const data = await this.request<DisplayOptions>(
+      district,
+      `/campus/api/portal/displayOptions/${structureID}?personID=${encodeURIComponent(studentId)}`,
+    );
+    this.featuresCache.set(key, { data, fetchedAt: Date.now() });
+    return data;
   }
 
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {

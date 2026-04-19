@@ -7,9 +7,10 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{
 const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 let handlers: Map<string, ToolHandler>;
 
-function setup(impl: (path: string) => Promise<unknown>) {
+function setup(impl: (path: string) => Promise<unknown>, features: Record<string, boolean> = { attendance: true }) {
   const client = new ICClient(account);
   vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => impl(path));
+  vi.spyOn(client, 'getFeatures').mockResolvedValue(features);
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();
   vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
@@ -282,6 +283,7 @@ describe('ic_list_attendance', () => {
 
   it('returns FeatureDisabled warning on 404 from attendance endpoint', async () => {
     const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ attendance: true });
     vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => {
       if (path === '/campus/api/portal/students') return [STUDENT];
       throw new Error('IC 404 Not Found for /x');
@@ -299,6 +301,7 @@ describe('ic_list_attendance', () => {
 
   it('rethrows non-404 errors', async () => {
     const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ attendance: true });
     vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => {
       if (path === '/campus/api/portal/students') return [STUDENT];
       throw new Error('IC 500');
@@ -310,6 +313,19 @@ describe('ic_list_attendance', () => {
     });
     registerAttendanceTools(server, client);
     await expect(handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow();
+  });
+
+  it('short-circuits via displayOptions when attendance flag is false', async () => {
+    const client = setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      throw new Error('attendance endpoint should not be called');
+    }, { attendance: false });
+    const result = await handlers.get('ic_list_attendance')!({ district: 'anoka', studentId: '12345' });
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      warning: 'FeatureDisabled', feature: 'attendance', district: 'anoka',
+    });
+    const urls = (client.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1] as string);
+    expect(urls.some((u) => u.startsWith('/campus/resources/portal/attendance/'))).toBe(false);
   });
 
   it('arrayifies bare-object terms/courses/lists/sectionPlacements (prism XML→JSON quirk)', async () => {

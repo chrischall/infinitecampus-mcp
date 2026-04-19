@@ -7,9 +7,10 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{
 const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 let handlers: Map<string, ToolHandler>;
 
-function setup(impl: (path: string) => Promise<unknown>) {
+function setup(impl: (path: string) => Promise<unknown>, features: Record<string, boolean> = { assessment: true }) {
   const client = new ICClient(account);
   vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => impl(path));
+  vi.spyOn(client, 'getFeatures').mockResolvedValue(features);
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();
   vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
@@ -173,6 +174,19 @@ describe('ic_list_assessments', () => {
       return Promise.reject(new Error('IC 500 Internal Server Error'));
     });
     await expect(handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' })).rejects.toThrow('IC 500');
+  });
+
+  it('short-circuits via displayOptions when assessment flag is false', async () => {
+    const client = setup((path) => {
+      if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+      throw new Error('assessments endpoint should not be called');
+    }, { assessment: false });
+    const result = await handlers.get('ic_list_assessments')!({ district: 'anoka', studentId: '481' });
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      warning: 'FeatureDisabled', feature: 'assessments', district: 'anoka',
+    });
+    const urls = (client.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1] as string);
+    expect(urls.some((u) => u.includes('/campus/resources/prism/portal/assessments'))).toBe(false);
   });
 
   it('arrayifies a single stateTest returned as a bare object (prism XML→JSON quirk)', async () => {

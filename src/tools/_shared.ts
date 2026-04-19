@@ -48,6 +48,37 @@ export function studentNotFound(studentId: string) {
 }
 
 /**
+ * Check a feature flag via the district's displayOptions allow-list for the
+ * student's first enrollment's structureID. Returns a FeatureDisabled content
+ * block when the flag is explicitly `false`. Returns `null` in every other
+ * case (flag is `true`, flag is absent, no enrollments, or the displayOptions
+ * call itself fails) — callers then fall through to hit the real endpoint.
+ *
+ * Non-fatal by design: if the allow-list can't be fetched we don't want to
+ * break the tool, since the 404-catch backstop still protects it.
+ */
+export async function checkFeatureDisabled(
+  client: ICClient,
+  district: string,
+  studentId: string,
+  student: RawStudent,
+  flag: string,
+  toolName: string,
+  emptyData: unknown = [],
+): Promise<{ content: [{ type: 'text'; text: string }] } | null> {
+  const structureID = student.enrollments?.[0]?.structureID;
+  if (!structureID) return null;
+  try {
+    const features = await client.getFeatures(district, structureID, studentId);
+    if (features[flag] === false) return featureDisabled(toolName, district, emptyData);
+    return null;
+  } catch (e) {
+    console.error(`[ic] displayOptions check failed for ${district}/${flag}: ${e instanceof Error ? e.message : e}`);
+    return null;
+  }
+}
+
+/**
  * Coerce a value to an array. Defensive against IC's prism XML→JSON
  * serializer which returns a bare object (not a 1-element array) for
  * collections that contain exactly one item. Also handles null/undefined.

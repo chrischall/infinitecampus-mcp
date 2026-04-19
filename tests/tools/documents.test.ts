@@ -20,10 +20,24 @@ function setup(client: ICClient) {
 }
 afterEach(() => vi.restoreAllMocks());
 
+const STUDENT = {
+  personID: 12345,
+  enrollments: [{ enrollmentID: 1, calendarID: 2, structureID: 3917 }],
+};
+
+function mockStudentAndReport(client: ICClient, reportResult: unknown | Error) {
+  vi.spyOn(client, 'getFeatures').mockResolvedValue({ documents: true });
+  vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => {
+    if (path === '/campus/api/portal/students') return [STUDENT];
+    if (reportResult instanceof Error) throw reportResult;
+    return reportResult as never;
+  });
+}
+
 describe('ic_list_documents', () => {
   it('calls /campus/resources/portal/report/all and trims response', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockResolvedValue([
+    mockStudentAndReport(client, [
       {
         name: 'Student Schedule',
         type: 'studentSchedule',
@@ -50,7 +64,7 @@ describe('ic_list_documents', () => {
 
   it('omits fields that are not present on the raw doc', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockResolvedValue([
+    mockStudentAndReport(client, [
       { name: 'X', url: '/x.pdf' }, // missing type/moduleLabel/endYear
       { type: 'reportCard' }, // missing name/url/moduleLabel/endYear
     ]);
@@ -64,26 +78,51 @@ describe('ic_list_documents', () => {
 
   it('handles null response from endpoint', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockResolvedValue(null);
+    mockStudentAndReport(client, null);
     setup(client);
     const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
     expect(JSON.parse(result.content[0].text)).toEqual([]);
   });
 
-  it('returns FeatureDisabled on 404', async () => {
+  it('returns FeatureDisabled on 404 backstop', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 404 Not Found for /campus/resources/portal/report/all?personID=123'));
+    mockStudentAndReport(client, new Error('IC 404 Not Found for /campus/resources/portal/report/all?personID=12345'));
     setup(client);
-    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '123' });
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
     const data = JSON.parse(result.content[0].text);
     expect(data).toEqual({ warning: 'FeatureDisabled', feature: 'documents', district: 'anoka', data: [] });
   });
 
+  it('short-circuits via displayOptions when documents flag is false', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ documents: false });
+    vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => {
+      if (path === '/campus/api/portal/students') return [STUDENT] as never;
+      throw new Error('endpoint should not be called');
+    });
+    setup(client);
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' });
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      warning: 'FeatureDisabled', feature: 'documents', district: 'anoka',
+    });
+    const urls = (client.request as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1] as string);
+    expect(urls.some((u) => u.startsWith('/campus/resources/portal/report/all'))).toBe(false);
+  });
+
+  it('returns StudentNotFound when studentId not in list', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'getFeatures').mockResolvedValue({ documents: true });
+    vi.spyOn(client, 'request').mockResolvedValue([STUDENT] as never);
+    setup(client);
+    const result = await handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '99999' });
+    expect(JSON.parse(result.content[0].text)).toEqual({ error: 'StudentNotFound', studentId: '99999' });
+  });
+
   it('rethrows non-404 errors', async () => {
     const client = new ICClient(account);
-    vi.spyOn(client, 'request').mockRejectedValue(new Error('IC 500 Internal Server Error'));
+    mockStudentAndReport(client, new Error('IC 500 Internal Server Error'));
     setup(client);
-    await expect(handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '123' })).rejects.toThrow('IC 500');
+    await expect(handlers.get('ic_list_documents')!({ district: 'anoka', studentId: '12345' })).rejects.toThrow('IC 500');
   });
 });
 

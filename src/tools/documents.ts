@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, toArray } from './_shared.js';
+import { textContent, is404, featureDisabled, toArray, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
 
 interface RawDocument {
   name?: string;
@@ -39,6 +39,13 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
     inputSchema: listArgs.shape,
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
+
+    const student = await findStudent(client, args.district, args.studentId);
+    if (!student) return studentNotFound(args.studentId);
+
+    const disabled = await checkFeatureDisabled(client, args.district, args.studentId, student, 'documents', 'documents');
+    if (disabled) return disabled;
+
     try {
       const raw = await client.request<RawDocument | RawDocument[] | null>(
         args.district,
