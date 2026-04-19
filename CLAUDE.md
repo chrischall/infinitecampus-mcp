@@ -10,7 +10,7 @@ npm test             # vitest run (all tests)
 npm run test:watch   # vitest in watch mode
 ```
 
-`dist/bundle.js` is committed (it's the npm-published artifact). Always rebuild before committing.
+`dist/` is gitignored; the bundle is built fresh by CI and ships via npm (per the `files` array in `package.json`). Rebuild locally with `npm run build` before publishing or when verifying a change end-to-end.
 
 ## Versioning
 
@@ -22,7 +22,7 @@ Version appears in three places — all must match:
 
 ### Important
 
-Do NOT manually bump versions or create tags unless the user explicitly asks. Versioning will be handled by a Cut & Bump GitHub Action (modeled after ofw-mcp's, not yet added here).
+Do NOT manually bump versions or create tags unless the user explicitly asks. Version bumps happen in their own commits at the end of a release cycle (current: v2.0.x).
 
 ## Architecture
 

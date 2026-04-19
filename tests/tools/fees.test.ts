@@ -80,7 +80,7 @@ describe('ic_list_fees', () => {
     });
   });
 
-  it('returns working endpoint with a note when only assignments 404', async () => {
+  it('returns working endpoint with PartialSuccess + issues when only assignments 404', async () => {
     setup((path) => {
       if (path.includes('/feeAssignments')) return Promise.reject(new Error('IC 404 Not Found'));
       if (path.includes('/totalSurplus/-1')) return Promise.resolve(42);
@@ -88,13 +88,15 @@ describe('ic_list_fees', () => {
     });
     const result = await handlers.get('ic_list_fees')!({ district: 'anoka', studentId: '481' });
     const data = JSON.parse(result.content[0].text);
+    expect(data.warning).toBe('PartialSuccess');
     expect(data.totalSurplus).toBe(42);
     expect(data.feeAssignments).toEqual([]);
-    expect(data.notes).toBeDefined();
-    expect(data.notes[0]).toContain('feeAssignments');
+    expect(data.issues).toBeDefined();
+    expect(data.issues[0]).toContain('feeAssignments');
+    expect(data.notes).toBeUndefined();
   });
 
-  it('returns working endpoint with a note when only surplus 404', async () => {
+  it('returns working endpoint with PartialSuccess + issues when only surplus 404', async () => {
     setup((path) => {
       if (path.includes('/feeAssignments')) return Promise.resolve([{ id: 1 }]);
       if (path.includes('/totalSurplus/-1')) return Promise.reject(new Error('IC 404 Not Found'));
@@ -102,10 +104,24 @@ describe('ic_list_fees', () => {
     });
     const result = await handlers.get('ic_list_fees')!({ district: 'anoka', studentId: '481' });
     const data = JSON.parse(result.content[0].text);
+    expect(data.warning).toBe('PartialSuccess');
     expect(data.totalSurplus).toBeNull();
     expect(data.feeAssignments).toEqual([{ id: 1 }]);
-    expect(data.notes).toBeDefined();
-    expect(data.notes[0]).toContain('totalSurplus');
+    expect(data.issues).toBeDefined();
+    expect(data.issues[0]).toContain('totalSurplus');
+    expect(data.notes).toBeUndefined();
+  });
+
+  it('does not include warning or issues on full success', async () => {
+    setup((path) => {
+      if (path.includes('/feeAssignments')) return Promise.resolve([]);
+      if (path.includes('/totalSurplus/-1')) return Promise.resolve(0);
+      throw new Error('unexpected');
+    });
+    const result = await handlers.get('ic_list_fees')!({ district: 'anoka', studentId: '481' });
+    const data = JSON.parse(result.content[0].text);
+    expect(data.warning).toBeUndefined();
+    expect(data.issues).toBeUndefined();
   });
 
   it('rethrows non-404 errors from feeAssignments', async () => {

@@ -6,9 +6,10 @@ import { textContent, is404, featureDisabled } from './_shared.js';
 type FeeAssignment = Record<string, unknown>;
 
 interface FeesResponse {
+  warning?: 'PartialSuccess';
   totalSurplus: number | null;
   feeAssignments: FeeAssignment[];
-  notes?: string[];
+  issues?: string[];
 }
 
 const argsSchema = z.object({
@@ -19,7 +20,7 @@ const argsSchema = z.object({
 export function registerFeeTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_fees', {
     description:
-      "List a student's fee assignments (charges owed) and running balance/surplus. Combines two endpoints: fee assignments and totalSurplus. Returns FeatureDisabled only if both endpoints 404; if only one works, returns that with a note.",
+      "List a student's fee assignments (charges owed) and running balance/surplus. Combines two endpoints: fee assignments and totalSurplus. Returns FeatureDisabled only if both endpoints 404; if only one works, returns that side with warning: 'PartialSuccess' and an issues[] explaining which endpoint failed.",
     annotations: { readOnlyHint: true },
     inputSchema: argsSchema.shape,
   }, async (rawArgs) => {
@@ -49,15 +50,16 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
       return featureDisabled('fees', args.district, { totalSurplus: null, feeAssignments: [] });
     }
 
+    const issues: string[] = [];
+    if (!assignments.ok) issues.push('feeAssignments endpoint returned 404 (module may be disabled for this district)');
+    if (!surplus.ok) issues.push('totalSurplus endpoint returned 404 (module may be disabled for this district)');
+
     const response: FeesResponse = {
+      ...(issues.length > 0 ? { warning: 'PartialSuccess' as const } : {}),
       totalSurplus: surplus.ok ? surplus.value : null,
       feeAssignments: assignments.ok ? assignments.value : [],
+      ...(issues.length > 0 ? { issues } : {}),
     };
-
-    const notes: string[] = [];
-    if (!assignments.ok) notes.push('feeAssignments endpoint returned 404 (module may be disabled for this district)');
-    if (!surplus.ok) notes.push('totalSurplus endpoint returned 404 (module may be disabled for this district)');
-    if (notes.length > 0) response.notes = notes;
 
     return textContent(response);
   });

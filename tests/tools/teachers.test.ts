@@ -31,7 +31,7 @@ const TEACHERS = [
     email: 'jane.doe@school.org',
     phone: '555-1234',
     role: 'Teacher',
-    _id: 'x', _model: 'contact', _hashCode: 1, mTime: 't', personID: 12345,
+    _id: 'x', _model: 'contact', _hashCode: 1, mTime: 't', personID: 12345, studentPersonID: 12345,
   },
   {
     sectionID: 102, courseName: 'English', firstName: 'John', lastName: 'Smith',
@@ -45,7 +45,7 @@ const COUNSELORS = [
     lastName: 'Jones',
     email: 'pat.jones@school.org',
     title: 'Counselor',
-    _id: 'y', _model: 'counselor', personID: 12345,
+    _id: 'y', _model: 'counselor', personID: 12345, studentPersonID: 12345,
   },
 ];
 
@@ -86,12 +86,14 @@ describe('ic_list_teachers', () => {
     expect(jane).not.toHaveProperty('_id');
     expect(jane).not.toHaveProperty('_model');
     expect(jane).not.toHaveProperty('personID');
+    expect(jane).not.toHaveProperty('studentPersonID');
 
     expect(data.counselors[0]).toMatchObject({
       firstName: 'Pat', lastName: 'Jones', email: 'pat.jones@school.org', title: 'Counselor',
     });
     expect(data.counselors[0]).not.toHaveProperty('_id');
     expect(data.counselors[0]).not.toHaveProperty('personID');
+    expect(data.counselors[0]).not.toHaveProperty('studentPersonID');
   });
 
   it('returns empty arrays when both endpoints 404', async () => {

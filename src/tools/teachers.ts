@@ -34,7 +34,7 @@ interface CounselorContact {
 
 // Fields we drop from teacher/counselor contact records (internal IDs, model markers)
 const DROP_KEYS = new Set([
-  '_id', '_model', '_hashCode', 'mTime', 'action', 'personID',
+  '_id', '_model', '_hashCode', 'mTime', 'action', 'personID', 'studentPersonID',
   'isKentucky', 'pairID', 'pairedEvent',
 ]);
 
