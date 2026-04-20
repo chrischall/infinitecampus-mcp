@@ -1,6 +1,6 @@
 {
   "name": "infinitecampus-mcp",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
