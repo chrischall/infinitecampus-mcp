@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "infinitecampus": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"],
+      "env": {
+        "IC_BASE_URL": "${IC_BASE_URL}",
+        "IC_DISTRICT": "${IC_DISTRICT}",
+        "IC_USERNAME": "${IC_USERNAME}",
+        "IC_PASSWORD": "${IC_PASSWORD}",
+        "IC_NAME": "${IC_NAME}"
+      }
+    }
+  }
+}

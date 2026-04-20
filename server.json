@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.chrischall/infinitecampus-mcp",
+  "description": "Infinite Campus (Campus Parent) MCP server for Claude \u2014 grades, attendance, assignments, messages, and documents via natural language",
+  "repository": {
+    "url": "https://github.com/chrischall/infinitecampus-mcp",
+    "source": "github"
+  },
+  "version": "2.1.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "infinitecampus-mcp",
+      "version": "2.1.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "IC_BASE_URL",
+          "description": "Campus Parent portal base URL, e.g. https://campus.district.k12.example.us",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "IC_DISTRICT",
+          "description": "Infinite Campus district app name (appName path segment from the portal URL)",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "IC_USERNAME",
+          "description": "Campus Parent portal username",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "IC_PASSWORD",
+          "description": "Campus Parent portal password",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "IC_NAME",
+          "description": "Friendly name for the district (defaults to district appname)",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

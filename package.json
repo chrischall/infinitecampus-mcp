@@ -1,6 +1,7 @@
 {
   "name": "infinitecampus-mcp",
   "version": "2.1.1",
+  "mcpName": "io.github.chrischall/infinitecampus-mcp",
   "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
@@ -30,7 +31,8 @@
     "dist",
     ".claude-plugin",
     "skills",
-    ".mcp.json"
+    ".mcp.json",
+    "server.json"
   ],
   "scripts": {
     "build": "tsc && npm run bundle",

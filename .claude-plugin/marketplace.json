@@ -1,0 +1,29 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "infinitecampus-mcp",
+  "owner": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "metadata": {
+    "description": "MCP server for Infinite Campus (Campus Parent) — grades, attendance, assignments, messages, documents",
+    "version": "2.1.1"
+  },
+  "plugins": [
+    {
+      "name": "infinitecampus-mcp",
+      "displayName": "Infinite Campus",
+      "source": "./",
+      "description": "Infinite Campus (Campus Parent) MCP server for Claude — grades, attendance, assignments, messages, and documents via natural language",
+      "version": "2.1.1",
+      "author": {
+        "name": "Chris Hall"
+      },
+      "homepage": "https://github.com/chrischall/infinitecampus-mcp",
+      "repository": "https://github.com/chrischall/infinitecampus-mcp",
+      "license": "MIT",
+      "keywords": ["infinite-campus", "campus-parent", "school", "education", "k12", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}
