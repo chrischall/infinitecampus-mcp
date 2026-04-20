@@ -1,0 +1,47 @@
+# Keep the .mcpb lean — the esbuild bundle at dist/bundle.js is self-contained,
+# so node_modules and source are unnecessary at runtime.
+
+# Dependencies — bundled into dist/bundle.js already
+node_modules/
+
+# Source (TypeScript + tests) — not executed at runtime
+src/
+tests/
+*.test.ts
+*.spec.ts
+
+# Build config / dev tooling
+tsconfig.json
+vitest.config.ts
+package-lock.json
+esbuild.config.*
+
+# Reports & artifacts
+coverage/
+*.tsbuildinfo
+*.map
+
+# Docs & planning
+docs/
+README.md
+CLAUDE.md
+
+# CI / local tooling
+.github/
+.claude/
+.claude-plugin/
+
+# Runtime secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# The .mcpb itself (in case it was built in-tree)
+*.mcpb
+*.skill
