@@ -36,7 +36,7 @@ import { registerFeaturesTools } from './tools/features.js';
 
 const account = loadAccount();
 const client = new ICClient(account);
-const server = new McpServer({ name: 'infinitecampus', version: '2.0.2' });
+const server = new McpServer({ name: 'infinitecampus', version: '2.1.0' });
 
 registerDistrictTools(server, client);
 registerStudentTools(server, client);
