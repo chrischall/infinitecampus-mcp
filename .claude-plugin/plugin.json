@@ -1,11 +1,16 @@
 {
   "name": "infinitecampus-mcp",
-  "version": "0.1.0",
-  "description": "Infinite Campus Campus Parent MCP server (multi-district)",
-  "mcp_servers": {
-    "infinitecampus": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"]
-    }
-  }
+  "displayName": "Infinite Campus",
+  "version": "2.1.1",
+  "description": "Infinite Campus (Campus Parent) MCP server for Claude — grades, attendance, assignments, messages, and documents",
+  "author": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "homepage": "https://github.com/chrischall/infinitecampus-mcp",
+  "repository": "https://github.com/chrischall/infinitecampus-mcp",
+  "license": "MIT",
+  "keywords": ["infinite-campus", "campus-parent", "school", "education", "k12", "mcp"],
+  "skills": "./SKILL.md",
+  "mcp": "./.mcp.json"
 }
