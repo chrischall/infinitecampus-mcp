@@ -1,7 +1,7 @@
 {
   "name": "infinitecampus-mcp",
   "displayName": "Infinite Campus",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Infinite Campus (Campus Parent) MCP server for Claude — grades, attendance, assignments, messages, and documents",
   "author": {
     "name": "Chris Hall",
@@ -10,7 +10,14 @@
   "homepage": "https://github.com/chrischall/infinitecampus-mcp",
   "repository": "https://github.com/chrischall/infinitecampus-mcp",
   "license": "MIT",
-  "keywords": ["infinite-campus", "campus-parent", "school", "education", "k12", "mcp"],
+  "keywords": [
+    "infinite-campus",
+    "campus-parent",
+    "school",
+    "education",
+    "k12",
+    "mcp"
+  ],
   "skills": "./SKILL.md",
   "mcp": "./.mcp.json"
 }
