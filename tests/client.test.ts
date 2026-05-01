@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { ICClient } from '../src/client.js';
+import { ICClient, AuthFailedError } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
 const primaryAccount: Account = {
@@ -21,6 +21,18 @@ function noLinkedAccounts() {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+describe('AuthFailedError', () => {
+  it('formats a message without a reason', () => {
+    const e = new AuthFailedError('anoka');
+    expect(e.message).toContain("Login failed for district 'anoka'");
+    expect(e.message).not.toContain('(');
+  });
+  it('includes the reason in parens when provided', () => {
+    const e = new AuthFailedError('anoka', 'wrong creds');
+    expect(e.message).toContain("Login failed for district 'anoka' (wrong creds)");
+  });
+});
 
 describe('ICClient.listDistricts', () => {
   it('returns name + baseUrl + linked for the configured account, no creds', () => {
@@ -112,9 +124,72 @@ describe('ICClient.request — login + GET', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
-  it('throws UnknownDistrictError when district not configured', async () => {
+  it('throws UnknownDistrictError when district not configured (after CUPS discovery)', async () => {
+    // request() now triggers ensureDiscovery on cache miss to handle linked
+    // districts that haven't been discovered yet. If the district is still
+    // unknown after discovery, throw.
+    fetchSpy
+      .mockResolvedValueOnce(new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+        status: 200,
+        headers: { 'set-cookie': 'JSESSIONID=disc; Path=/' },
+      }))
+      .mockResolvedValueOnce(noLinkedAccounts());
+
     const client = new ICClient(primaryAccount);
     await expect(client.request('nope', '/x')).rejects.toThrow(/Unknown district 'nope'/);
+  });
+
+  it('auto-runs CUPS discovery when an unknown district is requested first', async () => {
+    // Cold-start scenario: linked districts exist but haven't been discovered
+    // because no other call has triggered primary login yet.
+    let primaryLoggedIn = false;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/campus/verify.jsp') && u.includes('appName=anoka')) {
+        primaryLoggedIn = true;
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': 'JSESSIONID=primary; Path=/' },
+        });
+      }
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({
+          accounts: [{
+            districtName: 'Linked',
+            clientId: 'X',
+            districtLoginUrl: 'https://linked.infinitecampus.org/campus/verify.jsp',
+            appName: 'linked',
+            userId: 1,
+            state: 'NC',
+          }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (u.includes('/userAccountSwitch/originalDistrict')) {
+        return new Response(JSON.stringify({ clientID: 'orig' }), { status: 200 });
+      }
+      if (u.includes('/districts/current')) {
+        return new Response(JSON.stringify({ name: 'Primary' }), { status: 200 });
+      }
+      if (u.includes('/cups/loginToken')) {
+        return new Response(JSON.stringify({ token: { token: 'jwt' } }), { status: 200 });
+      }
+      if (u.includes('linked.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': 'JSESSIONID=linked; Path=/; XSRF-TOKEN=xtok; Path=/' },
+        });
+      }
+      // The actual data request
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(primaryAccount);
+    // First call is for the LINKED district before any other call has triggered login
+    const result = await client.request<{ ok: boolean }>('Linked', '/x');
+    expect(result).toEqual({ ok: true });
+    expect(primaryLoggedIn).toBe(true);
   });
 });
 
@@ -200,11 +275,18 @@ describe('ICClient.request — error paths', () => {
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
   });
 
-  it('throws AuthFailedError when login POST returns 200 with password-error', async () => {
+  it('throws AuthFailedError when verify.jsp returns AUTHENTICATION=password-error', async () => {
     fetchSpy
-      .mockResolvedValueOnce(new Response('<div class="password-error">Invalid credentials</div>', { status: 200 }));
+      .mockResolvedValueOnce(new Response('<AUTHENTICATION>password-error</AUTHENTICATION>', { status: 200 }));
     const client = new ICClient(primaryAccount);
-    await expect(client.request('anoka', '/x')).rejects.toThrow(/Login failed/);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/wrong username or password/);
+  });
+
+  it('throws AuthFailedError with the IC auth state when it is neither success nor password-error', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('<AUTHENTICATION>account-locked</AUTHENTICATION>', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/account-locked/);
   });
 
   it('throws PortalUnreachableError when login POST returns 5xx', async () => {

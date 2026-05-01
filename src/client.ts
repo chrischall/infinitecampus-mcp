@@ -74,8 +74,17 @@ export class ICClient {
   }
 
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {
-    const account = this.accounts.get(district);
-    if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
+    let account = this.accounts.get(district);
+    if (!account) {
+      // Cold-start: linked districts are only added to the accounts map after
+      // primary login + CUPS discovery. If the caller asks for a linked
+      // district before any other request triggered login, we'd otherwise
+      // throw UnknownDistrictError despite the district being valid. Run
+      // discovery once before giving up.
+      await this.ensureDiscovery();
+      account = this.accounts.get(district);
+      if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
+    }
     await this.ensureSession(account);
     return this.doRequest<T>(account, path, opts, false);
   }
@@ -103,16 +112,28 @@ export class ICClient {
 
     if (postRes.status >= 500) throw new PortalUnreachableError(account.name, postRes.status);
 
-    // Check for login failure — IC returns 200 with "password-error" in the
-    // body on bad credentials, not a 4xx status code.
+    // IC's verify.jsp returns 200 with an <AUTHENTICATION>X</AUTHENTICATION>
+    // body where X is the auth state (success / password-error / account-locked
+    // / etc.). 4xx is also possible on misconfigured endpoints. Surface the
+    // actual reason so the LLM can give the user something useful.
     const body = await postRes.text();
-    if (postRes.status >= 400 || body.includes('password-error')) {
-      throw new AuthFailedError(account.name);
+    if (postRes.status >= 400) {
+      throw new AuthFailedError(account.name, `HTTP ${postRes.status} from verify.jsp`);
+    }
+    const authMatch = body.match(/<AUTHENTICATION>([^<]+)<\/AUTHENTICATION>/i);
+    const authState = authMatch?.[1]?.trim().toLowerCase() ?? '';
+    if (authState === 'password-error') {
+      throw new AuthFailedError(account.name, 'IC returned password-error — wrong username or password');
+    }
+    if (authState && authState !== 'success') {
+      throw new AuthFailedError(account.name, `IC returned authentication state '${authState}'`);
     }
 
     // Capture cookies, deduplicating and filtering out deletions (Max-Age=0).
     const cookies = parseSetCookies(postRes.headers);
-    if (!cookies.cookieHeader) throw new AuthFailedError(account.name);
+    if (!cookies.cookieHeader) {
+      throw new AuthFailedError(account.name, 'login response missing session cookies');
+    }
 
     // Mutate the in-map session in place so concurrent callers'
     // references stay live (see ensureSession).
@@ -358,8 +379,13 @@ export class UnknownDistrictError extends Error {
 }
 
 export class AuthFailedError extends Error {
-  constructor(public district: string) {
-    super(`Login failed for district '${district}'. Check IC_USERNAME and IC_PASSWORD.`);
+  constructor(public district: string, public reason?: string) {
+    const detail = reason ? ` (${reason})` : '';
+    super(
+      `Login failed for district '${district}'${detail}. ` +
+      `Check IC_USERNAME and IC_PASSWORD; ` +
+      `if those are correct, the account may be locked or the portal may be down.`,
+    );
     this.name = 'AuthFailedError';
   }
 }
