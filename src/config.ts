@@ -3,8 +3,8 @@
  * looks like an unsubstituted shell placeholder (e.g. `${FOO}`) — defends
  * against MCP hosts that pass .mcp.json env blocks through unexpanded.
  */
-function readVar(key: string): string | undefined {
-  const raw = process.env[key];
+function readVar(env: Record<string, string | undefined>, key: string): string | undefined {
+  const raw = env[key];
   if (typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
   if (trimmed.length === 0) return undefined;
@@ -21,11 +21,11 @@ export interface Account {
 }
 
 export function loadAccount(env: Record<string, string | undefined> = process.env): Account {
-  const baseUrl = env.IC_BASE_URL;
-  const district = env.IC_DISTRICT;
-  const username = env.IC_USERNAME;
-  const password = env.IC_PASSWORD;
-  const name = env.IC_NAME || district;
+  const baseUrl = readVar(env, 'IC_BASE_URL');
+  const district = readVar(env, 'IC_DISTRICT');
+  const username = readVar(env, 'IC_USERNAME');
+  const password = readVar(env, 'IC_PASSWORD');
+  const name = readVar(env, 'IC_NAME') ?? district;
 
   const missing: string[] = [];
   if (!baseUrl) missing.push('IC_BASE_URL');
