@@ -55,5 +55,83 @@
       "description": "Friendly name for the district (e.g. \"Springfield\"). Defaults to the district app name if not set.",
       "required": false
     }
-  }
+  },
+  "tools": [
+    {
+      "name": "ic_list_districts",
+      "description": "List configured Infinite Campus districts (names and base URLs)"
+    },
+    {
+      "name": "ic_list_students",
+      "description": "List students enrolled under the parent account"
+    },
+    {
+      "name": "ic_get_schedule",
+      "description": "Get a student's class schedule for a given date"
+    },
+    {
+      "name": "ic_list_assignments",
+      "description": "List a student's assignments, optionally filtered by date or course"
+    },
+    {
+      "name": "ic_list_grades",
+      "description": "List a student's term grades and in-progress course grades"
+    },
+    {
+      "name": "ic_list_attendance",
+      "description": "List a student's absences and tardies (per-course summary by term)"
+    },
+    {
+      "name": "ic_list_behavior",
+      "description": "List a student's behavior events and referrals"
+    },
+    {
+      "name": "ic_list_food_service",
+      "description": "List a student's lunch balance and recent food-service transactions"
+    },
+    {
+      "name": "ic_list_messages",
+      "description": "List parent-visible messages, inbox items, and portal announcements"
+    },
+    {
+      "name": "ic_get_message",
+      "description": "Fetch and parse the HTML body of an inbox message"
+    },
+    {
+      "name": "ic_list_documents",
+      "description": "List a student's available documents (report cards, transcripts, schedules)"
+    },
+    {
+      "name": "ic_download_document",
+      "description": "Download a student's document (PDF) to disk"
+    },
+    {
+      "name": "ic_list_school_days",
+      "description": "List a student's instructional calendar days grouped by term"
+    },
+    {
+      "name": "ic_list_attendance_events",
+      "description": "List individual attendance events (absences, tardies, early releases) for a student"
+    },
+    {
+      "name": "ic_list_recent_grades",
+      "description": "List recently-graded assignments for a student"
+    },
+    {
+      "name": "ic_list_teachers",
+      "description": "List a student's teachers and assigned counselor(s)"
+    },
+    {
+      "name": "ic_list_assessments",
+      "description": "List a student's standardized test scores (state, national, district)"
+    },
+    {
+      "name": "ic_list_fees",
+      "description": "List a student's fee assignments and running balance"
+    },
+    {
+      "name": "ic_get_features",
+      "description": "List the district's feature-flag allow-list for each of a student's enrollments"
+    }
+  ]
 }
