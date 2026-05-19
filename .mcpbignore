@@ -1,7 +1,10 @@
-# Keep the .mcpb lean — the esbuild bundle at dist/bundle.js is self-contained,
-# so node_modules and source are unnecessary at runtime.
+# Keep the .mcpb lean — the esbuild bundle at dist/bundle.js is self-contained
+# and is the only thing the host runs. Ship just three files:
+#   - manifest.json    (declared entry point + user config)
+#   - dist/bundle.js   (the bundle itself)
+#   - package.json     ({"type":"module"} is required for Node to read bundle.js as ESM)
 
-# Dependencies — bundled into dist/bundle.js already
+# Dependencies — already inlined into dist/bundle.js by esbuild
 node_modules/
 
 # Source (TypeScript + tests) — not executed at runtime
@@ -10,13 +13,17 @@ tests/
 *.test.ts
 *.spec.ts
 
+# tsc emits one .js per .ts alongside the bundle — those aren't referenced
+dist/*
+!dist/bundle.js
+
 # Build config / dev tooling
 tsconfig.json
 vitest.config.ts
 package-lock.json
 esbuild.config.*
 
-# Reports & artifacts
+# Reports & build artifacts
 coverage/
 *.tsbuildinfo
 *.map
@@ -25,16 +32,31 @@ coverage/
 docs/
 README.md
 CLAUDE.md
+.env.example
+*.yaml
+*.yml
+
+# Registry / plugin / skill manifests (not used at runtime)
+server.json
+plugin.json
+.claude-plugin/
+.mcp.json
+SKILL.md
+skills/
+
+# Companion native bits (e.g. Chrome extension) are installed separately
+extension/
+
+# Repo-local maintenance scripts
+scripts/
 
 # CI / local tooling
 .github/
 .claude/
-.claude-plugin/
 
 # Runtime secrets
 .env
 .env.*
-!.env.example
 
 # Editor / OS noise
 .DS_Store
@@ -42,6 +64,6 @@ CLAUDE.md
 .vscode/
 .idea/
 
-# The .mcpb itself (in case it was built in-tree)
+# Don't recursively pack the bundle into itself
 *.mcpb
 *.skill
