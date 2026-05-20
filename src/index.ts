@@ -34,29 +34,45 @@ import { registerAssessmentTools } from './tools/assessments.js';
 import { registerFeeTools } from './tools/fees.js';
 import { registerFeaturesTools } from './tools/features.js';
 
-const account = loadAccount();
-const client = new ICClient(account);
+// Defer config errors so the server can still start cleanly when env vars
+// aren't set (e.g. during the host's install-time smoke test, before the
+// user has filled in user_config). When not configured we register no tools
+// and log a clear stderr message — far better than the previous crash loop.
+let account: ReturnType<typeof loadAccount> | null = null;
+let configError: Error | null = null;
+try {
+  account = loadAccount();
+} catch (e) {
+  configError = e as Error;
+}
+
 const server = new McpServer({ name: 'infinitecampus', version: '2.1.3' });
 
-registerDistrictTools(server, client);
-registerStudentTools(server, client);
-registerScheduleTools(server, client);
-registerAssignmentTools(server, client);
-registerGradeTools(server, client);
-registerAttendanceTools(server, client);
-registerBehaviorTools(server, client);
-registerFoodServiceTools(server, client);
-registerMessageTools(server, client);
-registerDocumentTools(server, client);
-registerCalendarTools(server, client);
-registerAttendanceEventsTools(server, client);
-registerRecentGradesTools(server, client);
-registerTeacherTools(server, client);
-registerAssessmentTools(server, client);
-registerFeeTools(server, client);
-registerFeaturesTools(server, client);
+if (account) {
+  const client = new ICClient(account);
+  registerDistrictTools(server, client);
+  registerStudentTools(server, client);
+  registerScheduleTools(server, client);
+  registerAssignmentTools(server, client);
+  registerGradeTools(server, client);
+  registerAttendanceTools(server, client);
+  registerBehaviorTools(server, client);
+  registerFoodServiceTools(server, client);
+  registerMessageTools(server, client);
+  registerDocumentTools(server, client);
+  registerCalendarTools(server, client);
+  registerAttendanceEventsTools(server, client);
+  registerRecentGradesTools(server, client);
+  registerTeacherTools(server, client);
+  registerAssessmentTools(server, client);
+  registerFeeTools(server, client);
+  registerFeaturesTools(server, client);
 
-console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
+  console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
+} else {
+  console.error(`[infinitecampus-mcp] Not configured: ${configError?.message ?? 'unknown error'}`);
+  console.error('[infinitecampus-mcp] Server is running with no tools registered. Set the required env vars and reinstall.');
+}
 console.error('[infinitecampus-mcp] Developed and maintained by AI (Claude). Use at your own discretion.');
 
 const transport = new StdioServerTransport();
