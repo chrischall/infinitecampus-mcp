@@ -1200,3 +1200,162 @@ describe('ICClient — CUPS linked district discovery', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('ICClient — fetchproxy mode (preloaded session)', () => {
+  // In fetchproxy mode the client receives cookies pre-loaded from a
+  // signed-in browser tab and skips the verify.jsp POST entirely. The
+  // account.username / account.password are empty strings (the resolver
+  // synthesizes them that way). On the very first request we still need to
+  // run CUPS linked-district discovery, and on a 401 (or TTL expiry) we
+  // refuse to attempt verify.jsp because there are no creds to send — the
+  // user must re-sign-in in the browser.
+  const fpAccount: Account = {
+    ...primaryAccount,
+    username: '',
+    password: '',
+  };
+  const preloaded = {
+    cookieHeader: 'JSESSIONID=fp-sess; XSRF-TOKEN=fp-xsrf',
+    xsrfToken: 'fp-xsrf',
+  };
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('uses the preloaded cookies on the very first request (no verify.jsp POST)', async () => {
+    fetchSpy
+      // CUPS linkedAccounts (no linked accounts)
+      .mockResolvedValueOnce(noLinkedAccounts())
+      // GET data
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(fpAccount, { preloaded });
+    const result = await client.request<{ ok: boolean }>('anoka', '/campus/api/test');
+    expect(result).toEqual({ ok: true });
+
+    // No verify.jsp call should have happened.
+    const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
+    expect(verifyCalls).toHaveLength(0);
+
+    // The data request should carry the preloaded cookie + XSRF header.
+    const dataCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    const headers = (dataCall[1] as RequestInit).headers as Record<string, string>;
+    expect(headers.Cookie).toBe(preloaded.cookieHeader);
+    expect(headers['X-XSRF-TOKEN']).toBe('fp-xsrf');
+  });
+
+  it('runs CUPS discovery lazily on the first primary-district request', async () => {
+    const linkedAccount = {
+      districtName: 'd2',
+      clientId: 'c2',
+      districtLoginUrl: 'https://d2.infinitecampus.org/campus/verify.jsp',
+      appName: 'd2',
+      userId: 1,
+      state: 'NC',
+    };
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [linkedAccount] }), { status: 200 });
+      }
+      if (u.includes('/userAccountSwitch/originalDistrict')) {
+        return new Response(JSON.stringify({ clientID: 'o' }), { status: 200 });
+      }
+      if (u.includes('/districts/current')) {
+        return new Response(JSON.stringify({ name: 'P' }), { status: 200 });
+      }
+      if (u.includes('/cups/loginToken')) {
+        return new Response(JSON.stringify({ token: { token: 'jwt' } }), { status: 200 });
+      }
+      if (u.includes('d2.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200, headers: { 'set-cookie': 'JSESSIONID=linked; Path=/' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.request('anoka', '/campus/api/test');
+    // Linked district should have been discovered after the primary call.
+    expect(client.listDistricts()).toHaveLength(2);
+    expect(client.listDistricts().find((d) => d.name === 'd2')?.linked).toBe(true);
+  });
+
+  it('does NOT re-run discovery on subsequent primary-district calls', async () => {
+    let linkedAccountsCalls = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/cups/linkedAccounts')) {
+        linkedAccountsCalls++;
+        return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.request('anoka', '/x');
+    await client.request('anoka', '/y');
+    await client.request('anoka', '/z');
+    expect(linkedAccountsCalls).toBe(1);
+  });
+
+  it('ensureDiscovery() runs CUPS discovery in fetchproxy mode', async () => {
+    fetchSpy.mockResolvedValueOnce(noLinkedAccounts());
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.ensureDiscovery();
+    expect(client.listDistricts()).toHaveLength(1);
+    const cupsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/cups/linkedAccounts'));
+    expect(cupsCalls).toHaveLength(1);
+  });
+
+  it('ensureDiscovery() in fetchproxy mode is idempotent', async () => {
+    fetchSpy.mockResolvedValueOnce(noLinkedAccounts());
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.ensureDiscovery();
+    await client.ensureDiscovery();
+    const cupsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/cups/linkedAccounts'));
+    expect(cupsCalls).toHaveLength(1);
+  });
+
+  it('refuses to attempt verify.jsp when primary creds are empty (TTL expiry)', async () => {
+    // Force TTL expiry on the preloaded session, then request again — login()
+    // should throw AuthFailedError instead of POSTing to verify.jsp with
+    // empty creds.
+    fetchSpy
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.request('anoka', '/x');
+
+    // Force TTL expiry
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
+
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal in the browser/);
+    // No verify.jsp call should have been attempted on the expired session.
+    const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
+    expect(verifyCalls).toHaveLength(0);
+  });
+
+  it('refuses to retry on 401 with empty creds — bubbles AuthFailedError', async () => {
+    fetchSpy
+      // CUPS linkedAccounts
+      .mockResolvedValueOnce(noLinkedAccounts())
+      // GET → 401
+      .mockResolvedValueOnce(new Response('', { status: 401 }));
+
+    const client = new ICClient(fpAccount, { preloaded });
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal/);
+    const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
+    expect(verifyCalls).toHaveLength(0);
+  });
+});

@@ -28,15 +28,19 @@ Tools that the harness will gate as write/IO operations: `ic_download_document`.
 
 ## Configuration
 
-Set a single set of env vars for your primary Infinite Campus account:
+`infinitecampus-mcp` tries two auth paths in priority order; whichever succeeds first is used. Existing setups keep working unchanged.
 
-```
-IC_BASE_URL=https://campus.springfield.k12.example.us
-IC_DISTRICT=springfield
-IC_USERNAME=parent@example.com
-IC_PASSWORD=...
-IC_NAME=Springfield           # optional, defaults to IC_DISTRICT
-```
+1. **Env-var credentials (legacy).** Set all four:
+   ```
+   IC_BASE_URL=https://campus.springfield.k12.example.us
+   IC_DISTRICT=springfield
+   IC_USERNAME=parent@example.com
+   IC_PASSWORD=...
+   IC_NAME=Springfield           # optional, defaults to IC_DISTRICT
+   ```
+2. **fetchproxy fallback (no password needed).** Set only `IC_BASE_URL` + `IC_DISTRICT` (still required so the MCP knows which host to talk to and which district to dispatch on), then install the [fetchproxy 0.3.0 extension](https://github.com/chrischall/fetchproxy) (Chrome Web Store / Safari `.dmg`) and sign into your IC portal once. The MCP reads the `JSESSIONID` (HttpOnly) + `XSRF-TOKEN` cookies on startup and goes direct-to-API from Node thereafter — the extension is **not** in the request hot path.
+
+Set `IC_DISABLE_FETCHPROXY=1` to opt out of the fallback (turns missing credentials into a hard error — useful in headless CI).
 
 Linked districts (via CUPS SSO) are auto-discovered after primary login — a parent with kids in two districts only configures the primary. No extra config needed. If you have truly separate IC instances with different credentials, run two MCP instances.
 

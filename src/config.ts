@@ -17,10 +17,22 @@ export interface Account {
   name: string;
   baseUrl: string;
   district: string;
+  /** Empty string when creds are not set (fetchproxy fallback path). */
   username: string;
+  /** Empty string when creds are not set (fetchproxy fallback path). */
   password: string;
 }
 
+/**
+ * Load the Account from env vars. IC_BASE_URL + IC_DISTRICT are ALWAYS
+ * required (the MCP needs to know which host to talk to and which district to
+ * dispatch on). IC_USERNAME + IC_PASSWORD must be set together or omitted
+ * together — partial creds are treated as a user mistake and throw rather
+ * than falling through to fetchproxy (which would mask the typo).
+ *
+ * When username/password are omitted the resolved Account carries empty
+ * strings. The caller (`resolveAuth()`) treats that as "try fetchproxy".
+ */
 export function loadAccount(env: Record<string, string | undefined> = process.env): Account {
   const baseUrl = readVar(env, 'IC_BASE_URL');
   const district = readVar(env, 'IC_DISTRICT');
@@ -28,16 +40,15 @@ export function loadAccount(env: Record<string, string | undefined> = process.en
   const password = readVar(env, 'IC_PASSWORD');
   const name = readVar(env, 'IC_NAME') ?? district;
 
+  // IC_BASE_URL + IC_DISTRICT are always required.
   const missing: string[] = [];
   if (!baseUrl) missing.push('IC_BASE_URL');
   if (!district) missing.push('IC_DISTRICT');
-  if (!username) missing.push('IC_USERNAME');
-  if (!password) missing.push('IC_PASSWORD');
 
   if (missing.length > 0) {
     throw new Error(
       `Missing required env var(s): ${missing.join(', ')}. ` +
-      'Set IC_BASE_URL, IC_DISTRICT, IC_USERNAME, and IC_PASSWORD.',
+      'Set IC_BASE_URL (your portal URL) and IC_DISTRICT (the app-name path segment).',
     );
   }
 
@@ -45,11 +56,25 @@ export function loadAccount(env: Record<string, string | undefined> = process.en
     throw new Error(`IC_BASE_URL must be an https URL, got: '${baseUrl}'`);
   }
 
+  // Username + password must be set together or omitted together. Partial
+  // configuration is almost always a typo, so surface it rather than silently
+  // falling through to fetchproxy.
+  if ((username && !password) || (!username && password)) {
+    const partialMissing: string[] = [];
+    if (!username) partialMissing.push('IC_USERNAME');
+    if (!password) partialMissing.push('IC_PASSWORD');
+    throw new Error(
+      `Missing required env var(s) for password auth: ${partialMissing.join(', ')}. ` +
+      'Set both IC_USERNAME and IC_PASSWORD, or leave both unset to use the fetchproxy ' +
+      'fallback (requires the fetchproxy browser extension and a signed-in IC portal tab).',
+    );
+  }
+
   return {
     name: name!,
     baseUrl: baseUrl!.replace(/\/$/, ''),
     district: district!,
-    username: username!,
-    password: password!,
+    username: username ?? '',
+    password: password ?? '',
   };
 }

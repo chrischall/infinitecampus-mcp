@@ -35,15 +35,55 @@ export class ICClient {
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
   private primaryName: string;
   private featuresCache = new Map<string, { data: DisplayOptions; fetchedAt: number }>();
+  /**
+   * True when the primary account has empty creds (fetchproxy mode). The
+   * client uses pre-loaded cookies in place of the `verify.jsp` POST and
+   * cannot re-login when those cookies expire — the user must re-sign-in
+   * in the browser. CUPS linked-district discovery still runs lazily on
+   * first call to `ensureDiscovery()`.
+   */
+  private fetchproxyMode = false;
+  private fetchproxyDiscoveryRan = false;
 
-  constructor(account: Account) {
+  /**
+   * `preloaded` is the fetchproxy escape hatch: when set, the client treats
+   * the supplied cookies as a freshly-completed login on the primary account.
+   * This skips the `verify.jsp` POST entirely (the account has empty creds
+   * in this mode) but otherwise behaves identically — CUPS linked-district
+   * discovery still runs on first request, 401 retry still triggers a
+   * re-login. On a 401 with empty credentials we can't re-login from Node;
+   * the user must re-sign-in in the browser.
+   */
+  constructor(
+    account: Account,
+    opts: { preloaded?: { cookieHeader: string; xsrfToken: string } } = {},
+  ) {
     this.accounts.set(account.name, account);
     this.primaryName = account.name;
+    if (opts.preloaded) {
+      this.sessions.set(account.name, {
+        cookie: opts.preloaded.cookieHeader,
+        xsrfToken: opts.preloaded.xsrfToken,
+        loggedInAt: Date.now(),
+        loginInFlight: null,
+      });
+      this.fetchproxyMode = true;
+    }
   }
 
   async ensureDiscovery(): Promise<void> {
     // Ensure primary account is logged in, which triggers CUPS linked-district discovery
     await this.ensureSession(this.accounts.get(this.primaryName)!);
+    // fetchproxy mode skips login() and therefore the discovery call inside
+    // it. Run discovery directly the first time someone asks for it. The
+    // primary is never in linkedTo (it's the root of the linkedTo map), so
+    // no need to guard on that — the existing guard inside login() is for
+    // the inverse case where login() is called for an already-linked
+    // district during a TTL refresh.
+    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan) {
+      this.fetchproxyDiscoveryRan = true;
+      await this.discoverLinkedDistricts(this.accounts.get(this.primaryName)!);
+    }
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -86,6 +126,14 @@ export class ICClient {
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
     await this.ensureSession(account);
+    // In fetchproxy mode, login() never runs and therefore never calls
+    // discoverLinkedDistricts. Run discovery once on the first primary call
+    // so linked districts are discoverable. (The primary is never in
+    // linkedTo by construction.)
+    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan && account.name === this.primaryName) {
+      this.fetchproxyDiscoveryRan = true;
+      await this.discoverLinkedDistricts(account);
+    }
     return this.doRequest<T>(account, path, opts, false);
   }
 
@@ -103,6 +151,19 @@ export class ICClient {
   }
 
   private async login(account: Account): Promise<void> {
+    // fetchproxy mode: empty primary creds, can't post to verify.jsp.
+    // The user must re-sign-in in the browser (and the next process start
+    // will pick up the fresh cookies). Linked accounts have placeholder
+    // creds too; their re-auth flows through the primary via CUPS, not
+    // verify.jsp directly.
+    if (!account.username || !account.password) {
+      throw new AuthFailedError(
+        account.name,
+        'session expired and no IC_USERNAME/IC_PASSWORD set — ' +
+          'sign back into your IC portal in the browser and restart the MCP',
+      );
+    }
+
     // ic_parent_api's pattern: single POST to verify.jsp, let the response
     // set cookies. No pre-login GET needed (unlike OFW's Spring Security).
     const postRes = await fetch(

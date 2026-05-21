@@ -30,20 +30,26 @@
         },
         {
           "name": "IC_USERNAME",
-          "description": "Campus Parent portal username",
-          "isRequired": true,
+          "description": "Campus Parent portal username. Optional: leave unset to use the fetchproxy browser-extension fallback.",
+          "isRequired": false,
           "format": "string"
         },
         {
           "name": "IC_PASSWORD",
-          "description": "Campus Parent portal password",
-          "isRequired": true,
+          "description": "Campus Parent portal password. Required only when IC_USERNAME is set.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true
         },
         {
           "name": "IC_NAME",
           "description": "Friendly name for the district (defaults to district appname)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "IC_DISABLE_FETCHPROXY",
+          "description": "Set to 1 to skip the fetchproxy browser-extension fallback (missing creds become a hard error — useful in headless CI).",
           "isRequired": false,
           "format": "string"
         }

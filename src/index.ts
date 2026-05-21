@@ -14,7 +14,8 @@ try {
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadAccount } from './config.js';
+import type { Account } from './config.js';
+import { resolveAuth, type ResolvedAuth } from './auth.js';
 import { ICClient } from './client.js';
 import { registerDistrictTools } from './tools/districts.js';
 import { registerStudentTools } from './tools/students.js';
@@ -36,12 +37,18 @@ import { registerFeaturesTools } from './tools/features.js';
 
 // Defer config errors so the server can still start cleanly when env vars
 // aren't set (e.g. during the host's install-time smoke test, before the
-// user has filled in user_config). When not configured we register no tools
-// and log a clear stderr message — far better than the previous crash loop.
-let account: ReturnType<typeof loadAccount> | null = null;
+// user has filled in user_config OR the user hasn't yet signed into their
+// IC portal in the browser). When not configured we register no tools and
+// log a clear stderr message — far better than the previous crash loop.
+let account: Account | null = null;
+let preloaded: ResolvedAuth['preloaded'];
+let source: ResolvedAuth['source'] | undefined;
 let configError: Error | null = null;
 try {
-  account = loadAccount();
+  const resolved = await resolveAuth();
+  account = resolved.account;
+  preloaded = resolved.preloaded;
+  source = resolved.source;
 } catch (e) {
   configError = e as Error;
 }
@@ -49,7 +56,7 @@ try {
 const server = new McpServer({ name: 'infinitecampus', version: '2.1.3' });
 
 if (account) {
-  const client = new ICClient(account);
+  const client = new ICClient(account, { preloaded });
   registerDistrictTools(server, client);
   registerStudentTools(server, client);
   registerScheduleTools(server, client);
@@ -68,7 +75,8 @@ if (account) {
   registerFeeTools(server, client);
   registerFeaturesTools(server, client);
 
-  console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})`);
+  const suffix = source === 'fetchproxy' ? ' [via fetchproxy]' : '';
+  console.error(`[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})${suffix}`);
 } else {
   console.error(`[infinitecampus-mcp] Not configured: ${configError?.message ?? 'unknown error'}`);
   console.error('[infinitecampus-mcp] Server is running with no tools registered. Set the required env vars and reinstall.');
