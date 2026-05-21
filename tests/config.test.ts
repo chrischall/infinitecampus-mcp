@@ -41,17 +41,55 @@ describe('loadAccount errors', () => {
     expect(() => loadAccount(env)).toThrow(/Missing required.*IC_BASE_URL/);
   });
 
-  it('throws when IC_PASSWORD is missing', () => {
+  it('throws when only IC_PASSWORD is missing (partial creds = user mistake)', () => {
     const { IC_PASSWORD: _, ...env } = baseEnv;
-    expect(() => loadAccount(env)).toThrow(/Missing required.*IC_PASSWORD/);
+    expect(() => loadAccount(env)).toThrow(/IC_PASSWORD/);
+    expect(() => loadAccount(env)).toThrow(/Set both IC_USERNAME and IC_PASSWORD/);
   });
 
-  it('throws when all required vars are missing', () => {
-    expect(() => loadAccount({})).toThrow(/Missing required/);
+  it('throws when only IC_USERNAME is missing (partial creds = user mistake)', () => {
+    const { IC_USERNAME: _, ...env } = baseEnv;
+    expect(() => loadAccount(env)).toThrow(/IC_USERNAME/);
+  });
+
+  it('throws when IC_BASE_URL + IC_DISTRICT are both missing', () => {
+    expect(() => loadAccount({})).toThrow(/Missing required.*IC_BASE_URL.*IC_DISTRICT/);
   });
 
   it('throws on non-https BASE_URL', () => {
     const env = { ...baseEnv, IC_BASE_URL: 'http://anoka.infinitecampus.org' };
     expect(() => loadAccount(env)).toThrow(/IC_BASE_URL must be an https URL/);
+  });
+
+  it('returns empty username/password when neither is set (fetchproxy fallback signal)', () => {
+    const env = {
+      IC_BASE_URL: 'https://anoka.infinitecampus.org',
+      IC_DISTRICT: 'anoka',
+    };
+    const account = loadAccount(env);
+    expect(account.username).toBe('');
+    expect(account.password).toBe('');
+  });
+});
+
+describe('loadAccount — env-var sanitization (readVar)', () => {
+  // readVar's defenses against MCP hosts that pass unexpanded `${VAR}`
+  // placeholders, or stringified `undefined`/`null` values.
+  it.each([
+    ['undefined', 'IC_BASE_URL'],
+    ['null', 'IC_BASE_URL'],
+    ['${IC_BASE_URL}', 'IC_BASE_URL'],
+    ['   ', 'IC_BASE_URL'],
+  ])('treats IC_BASE_URL=%j as unset', (value, key) => {
+    const env = { ...baseEnv, [key]: value };
+    expect(() => loadAccount(env)).toThrow(/IC_BASE_URL/);
+  });
+
+  it('coerces non-string env values to undefined (raw not a string branch)', () => {
+    // Simulates an environment where the host injects a non-string value
+    // (defensive: the Node typings allow undefined, but a misbehaving host
+    // could pass numbers/booleans). readVar should treat as unset.
+    const env = { ...baseEnv, IC_NAME: undefined } as Record<string, string | undefined>;
+    expect(loadAccount(env).name).toBe(baseEnv.IC_DISTRICT);
   });
 });

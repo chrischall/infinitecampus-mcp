@@ -23,9 +23,11 @@ All tools are prefixed `ic_` (e.g. `ic_list_grades`, `ic_get_schedule`). Every p
 ```
 src/
   index.ts             # MCP server entry — registers all tools, stdio transport
-  config.ts            # loadAccount() — flat IC_* env loader, https + presence checks
+  auth.ts              # resolveAuth(): two-path priority (env vars → fetchproxy fallback). Pattern A template
+  config.ts            # loadAccount() — IC_* env loader. IC_BASE_URL+IC_DISTRICT required;
+                       #   IC_USERNAME+IC_PASSWORD optional (both or neither — partial = error)
   client.ts            # ICClient — per-district session pool, lazy login, 401 retry,
-                       #   CUPS linked-district discovery, download()
+                       #   CUPS linked-district discovery, download(). Accepts preloaded cookies
   tools/
     _shared.ts         # textContent, findStudent, featureDisabled, checkFeatureDisabled,
                        #   is404, toArray — shared MCP shape + 404/feature-flag helpers
@@ -55,16 +57,28 @@ Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas 
 ## Environment
 
 ```
-IC_BASE_URL=https://campus.<district>.k12.example.us  # https only, required
-IC_DISTRICT=<appName>                                 # district appName path segment, required
-IC_USERNAME=<parent username>                         # required
-IC_PASSWORD=<parent password>                         # required
+IC_BASE_URL=https://campus.<district>.k12.example.us  # https only, required (both auth paths)
+IC_DISTRICT=<appName>                                 # district appName path segment, required (both auth paths)
+IC_USERNAME=<parent username>                         # optional (set with IC_PASSWORD for password login)
+IC_PASSWORD=<parent password>                         # optional (set with IC_USERNAME for password login)
 IC_NAME=<friendly name>                               # optional, defaults to IC_DISTRICT
+IC_DISABLE_FETCHPROXY=1                               # optional, "1|true|yes|on" → skip fetchproxy fallback
 ```
 
-`loadAccount()` trims whitespace and treats blanks, the literals `undefined`/`null`, and unsubstituted `${FOO}` placeholders as missing — protects against MCP hosts passing `.mcp.json` env blocks through unexpanded. Loaded via `dotenv` from `.env` at process start (`quiet: true`; stdout is reserved for JSON-RPC).
+`loadAccount()` trims whitespace and treats blanks, the literals `undefined`/`null`, and unsubstituted `${FOO}` placeholders as missing — protects against MCP hosts passing `.mcp.json` env blocks through unexpanded. Loaded via `dotenv` from `.env` at process start (`quiet: true`; stdout is reserved for JSON-RPC). Partial creds (one of IC_USERNAME/IC_PASSWORD set without the other) are treated as a user mistake and throw rather than falling through to fetchproxy — masking typos would be worse than failing loudly.
 
-Linked districts (parent has kids in 2+ IC instances under the same SSO) are added dynamically by `ICClient.discoverLinkedDistricts()` after primary login — no extra config. For truly separate credentials, run two MCP instances.
+Linked districts (parent has kids in 2+ IC instances under the same SSO) are added dynamically by `ICClient.discoverLinkedDistricts()` after primary login — no extra config. For truly separate credentials, run two MCP instances. In fetchproxy mode, discovery runs lazily on the first primary-district request (since `login()` is skipped).
+
+## Auth resolution (Pattern A template)
+
+`src/auth.ts` is the canonical "browser-bootstrap + Node-direct" shape used across our MCP family (ofw-mcp, resy-mcp, opentable-mcp, zola-mcp, signupgenius-mcp, …). Two paths, priority order:
+
+1. **Env-var credentials** (`IC_USERNAME` + `IC_PASSWORD` + `IC_BASE_URL` + `IC_DISTRICT`) → `loadAccount()` returns a full Account; `ICClient.login()` POSTs to `verify.jsp` exactly as before. Unchanged from pre-fetchproxy behavior.
+2. **fetchproxy fallback** → `@fetchproxy/bootstrap` (0.3.0+) opens a one-shot WebSocket bridge to the extension, reads `JSESSIONID` (HttpOnly, via `chrome.cookies.get`) + `XSRF-TOKEN` from a signed-in IC portal tab, closes the bridge. The client gets pre-loaded cookies in place of running `verify.jsp`. All subsequent IC calls go out via plain Node `fetch()` — fetchproxy is NOT in the request hot path.
+
+CUPS linked-district token-minting still happens entirely in Node — it just needs the primary district's cookies (which fetchproxy provides on bootstrap). On a 401 or TTL expiry in fetchproxy mode, the client refuses to attempt `verify.jsp` (empty creds) and throws an actionable error telling the user to re-sign-in in the browser and restart the MCP.
+
+`@fetchproxy/bootstrap` is mocked at the module boundary in `tests/auth.test.ts`. Existing tool tests don't import it — they exercise `ICClient` directly.
 
 ## Testing
 

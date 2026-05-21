@@ -43,7 +43,12 @@ npm install && npm run build
 
 ## Authentication
 
-Infinite Campus uses username/password — log in with the same credentials you use for the Campus Parent portal. `IC_BASE_URL` is your district's portal URL; `IC_DISTRICT` is the app-name path segment from that URL.
+Two paths — the MCP tries them in priority order:
+
+1. **Username/password.** Set `IC_USERNAME` + `IC_PASSWORD` along with `IC_BASE_URL` + `IC_DISTRICT`.
+2. **fetchproxy fallback.** Install the [fetchproxy 0.3.0 extension](https://github.com/chrischall/fetchproxy), sign into your IC portal in the browser, and leave `IC_USERNAME` / `IC_PASSWORD` unset. `IC_BASE_URL` + `IC_DISTRICT` are still required so the MCP knows which host to read cookies from.
+
+`IC_BASE_URL` is your district's portal URL; `IC_DISTRICT` is the app-name path segment from that URL. Set `IC_DISABLE_FETCHPROXY=1` to opt out of the fallback (headless / CI).
 
 ## Tools (prefix `ic_`)
 
