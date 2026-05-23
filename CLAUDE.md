@@ -124,6 +124,16 @@ The **PR title** becomes the bullet — write it like a user-facing changelog en
 
 Open with `gh pr create --label <label>` (or `--label ignore-for-release` for chores not worth a line), then **immediately** run `gh pr merge <num> --auto --merge` so the PR merges as soon as CI passes. The repo allows merge commits only (no squash, no rebase) — don't pass `--squash`/`--rebase` or the call will fail.
 
+## Publishing constraints
+
+The MCP Registry's [server.schema.json](https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json) caps `server.json`'s `description` at **100 characters**. Values over that fail `mcp-publisher publish` with HTTP 422 (`validation failed: expected length <= 100, location: body.description`). The other description fields (`manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`) have no published length constraint and can stay longer.
+
+Sanity-check before committing a description change:
+
+```bash
+jq -r '.description | length' server.json
+```
+
 ## Versioning
 
 Version appears in SEVEN places — all must match:
