@@ -49,3 +49,25 @@ See `.env.example`.
 ## Status
 
 Unofficial — not affiliated with Infinite Campus. AI-maintained.
+
+## Acknowledgement of Terms
+
+By using this MCP server, you acknowledge and agree to the following:
+
+**1. This server accesses your own Campus Parent account.** Auth happens via your own credentials, scoped to the student records your school district has authorized you to view. It does not — and cannot — access anyone else's student records.
+
+**2. [Infinite Campus's Terms of Use](https://www.infinitecampus.com/terms/terms-of-use) govern your use of this server**, just as they govern your direct use of Campus Parent. The clauses most relevant here:
+
+> Users may not access, use, or search the Services by any means other than our publicly supported interfaces (for example, scraping or using the content to train artificial intelligence software).
+
+And: *"You are responsible for safeguarding the password that you use to access the Service and you agree not to disclose your password to any third party."*
+
+You are agreeing to those terms — read by the maintainer 2026-05-23 — every time you invoke a tool in this server. This server uses Infinite Campus's mobile-app JSON endpoints (`/campus/api/oneRosterCampus`, `/portal/api/...`) which are not "publicly supported interfaces" — IC may treat this as a ToS violation.
+
+**3. Personal, parent/student use only.** This project is not affiliated with, endorsed by, sponsored by, or in partnership with Infinite Campus, Inc. or any school district. It is a personal automation tool for an authorized Campus Parent / Campus Student user to read their own (or their student's) records. **Do not** use it to bulk-extract student data, share another family's grades, or train AI models on student records.
+
+**4. FERPA + COPPA apply.** Student educational records are protected under the federal Family Educational Rights and Privacy Act (FERPA), and student data for under-13 users is additionally covered by COPPA. Even though *your* parent-portal access is lawful, **how you store, redistribute, or feed that data into LLMs is regulated**. Treat any output from this server (grades, attendance, behavior records, schedules) as confidential student data. Do not put it in shared LLM contexts, do not paste it into screenshots, and do not train models on it.
+
+**5. You accept full responsibility** for any consequences of using this server in connection with your Campus Parent account — rate limiting, account warnings, district IT investigations, or any enforcement action your district or Infinite Campus takes. Your district may have additional acceptable-use policies (acceptable-use agreements, parent handbooks) that further restrict automation. If your district or Infinite Campus objects to your use, stop using this server.
+
+This section is the maintainer's good-faith summary of the terms — it is not legal advice and does not modify or supersede Infinite Campus's actual ToU or any school district's policies.
