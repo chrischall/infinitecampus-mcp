@@ -122,7 +122,17 @@ For every PR, apply exactly one label so it lands in the right release-notes sec
 
 The **PR title** becomes the bullet — write it like a user-facing changelog entry (`ic_list_grades: include in-progress course grades`), not internal shorthand (`grades tweaks`). Conventional-commit prefixes (`feat:`, `fix:`, `chore:`) are still fine in commit messages, but the PR title should read clean.
 
-Open with `gh pr create --label <label>` (or `--label ignore-for-release` for chores not worth a line), then **immediately** run `gh pr merge <num> --auto --squash` so the PR merges as soon as CI passes. The repo allows squash-merge only (no merge commit, no rebase) — don't pass `--merge`/`--rebase` or the call will fail.
+### How PRs merge
+
+**Do not manually merge PRs — including the release-please release PR.** Open with `gh pr create --label <label>` (or `--label ignore-for-release` for chores not worth a release-notes line). That is the whole job. Do **not** run `gh pr merge --auto --squash` yourself.
+
+The automation handles the rest:
+
+1. `pr-auto-review.yml` runs a Claude review on every PR. On a `pass` verdict it adds the `ready-to-merge` label.
+2. `release-please.yml` adds the `ready-to-merge` label to its own release PR automatically.
+3. `auto-merge.yml`, on the `ready-to-merge` label (or on a dependabot PR), arms `gh pr merge --auto --squash` for you. The moment CI is green the PR squash-merges itself.
+
+If Claude's review verdict was `warn` or `fail` but you've decided to ship anyway, add the label yourself: `gh pr edit <num> --add-label ready-to-merge`. The repo allows squash-merge only — `--merge` and `--rebase` are blocked at the branch-protection ruleset level.
 
 ## Publishing constraints
 
