@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.0...v2.2.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* **ci:** prevent labeled event from cancelling auto-review ([#32](https://github.com/chrischall/infinitecampus-mcp/issues/32)) ([1558087](https://github.com/chrischall/infinitecampus-mcp/commit/1558087ac8d2cf736c4a1f7180633bdbd746f0d0))
+
 ## [2.2.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.1.4...v2.2.0) (2026-05-24)
 
 
