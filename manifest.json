@@ -1,7 +1,7 @@
 {
   "dxt_version": "0.1",
   "name": "infinitecampus-mcp",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "Infinite Campus (Campus Parent) MCP — single-account with CUPS auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via the fetchproxy browser extension.",
   "author": {
     "name": "Claude Code (AI)"
