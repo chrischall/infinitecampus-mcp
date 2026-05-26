@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.2...v2.2.3) (2026-05-26)
+
+
+### Bug Fixes
+
+* **ci:** substitute repo name in publish workflow ([#37](https://github.com/chrischall/infinitecampus-mcp/issues/37)) ([75024bc](https://github.com/chrischall/infinitecampus-mcp/commit/75024bcfbeab56e637e1d92d0e85b2fbb06c7666))
+
 ## [2.2.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.1...v2.2.2) (2026-05-26)
 
 
