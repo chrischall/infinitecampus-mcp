@@ -85,11 +85,11 @@ jobs:
           import zipfile, pathlib, os
 
           version = os.environ["VERSION"]
-          skill_name = "ofw-mcp"
+          skill_name = "infinitecampus-mcp"
           out = pathlib.Path(f"{skill_name}-{version}.skill")
 
           with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
-              zf.write(pathlib.Path("skills/ofw/SKILL.md"), f"{skill_name}/SKILL.md")
+              zf.write(pathlib.Path("SKILL.md"), f"{skill_name}/SKILL.md")
 
           print(f"Packaged {out} ({out.stat().st_size} bytes)")
           EOF
@@ -97,7 +97,7 @@ jobs:
       - name: Build .mcpb bundle
         run: |
           npx @anthropic-ai/mcpb pack
-          mv ofw-mcp.mcpb "ofw-mcp-${VERSION}.mcpb"
+          mv infinitecampus-mcp.mcpb "infinitecampus-mcp-${VERSION}.mcpb"
 
       # Idempotent: skip if this version is already on the registry.
       - name: Publish to npm
@@ -133,8 +133,8 @@ jobs:
             echo "CLAWHUB_TOKEN not set — skipping ClawHub publish."
             exit 0
           fi
-          if [ ! -f skills/ofw/SKILL.md ]; then
-            echo "skills/ofw/SKILL.md not present — skipping ClawHub publish."
+          if [ ! -f SKILL.md ]; then
+            echo "SKILL.md not present — skipping ClawHub publish."
             exit 0
           fi
           npx --yes clawhub login --token "$CLAWHUB_TOKEN" --no-browser
@@ -143,8 +143,8 @@ jobs:
           # requires an openclaw.plugin.json we don't have. Workaround: copy
           # SKILL.md to a clean temp dir and publish that as a standalone skill.
           SKILL_DIR=$(mktemp -d)
-          cp skills/ofw/SKILL.md "$SKILL_DIR/"
-          npx --yes clawhub publish "$SKILL_DIR" --version "${VERSION}" --slug ofw-mcp
+          cp SKILL.md "$SKILL_DIR/"
+          npx --yes clawhub publish "$SKILL_DIR" --version "${VERSION}" --slug infinitecampus-mcp
 
       # release-please already created the GitHub Release with CHANGELOG
       # content; just attach the build artifacts. --clobber so re-running
@@ -154,6 +154,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ needs.release-please.outputs.tag_name }}" \
-            "ofw-mcp-${VERSION}.skill" \
-            "ofw-mcp-${VERSION}.mcpb" \
+            "infinitecampus-mcp-${VERSION}.skill" \
+            "infinitecampus-mcp-${VERSION}.mcpb" \
             --clobber
