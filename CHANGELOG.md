@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.1...v2.2.2) (2026-05-26)
+
+
+### Documentation
+
+* **claude:** warn against early PRs and call out first-party dep bumps ([#35](https://github.com/chrischall/infinitecampus-mcp/issues/35)) ([ca0e8da](https://github.com/chrischall/infinitecampus-mcp/commit/ca0e8da9582ec1d8d30eb0fcaec2887d93b5eee4))
+
 ## [2.2.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.0...v2.2.1) (2026-05-25)
 
 
