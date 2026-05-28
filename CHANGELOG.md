@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.3...v2.3.0) (2026-05-27)
+
+
+### Features
+
+* **deps:** bump @fetchproxy/bootstrap to ^0.8.0 with bridge-down hints ([#40](https://github.com/chrischall/infinitecampus-mcp/issues/40)) ([604ad9e](https://github.com/chrischall/infinitecampus-mcp/commit/604ad9ee1e9ff20f9c11eb7f777f249f4d771c72))
+
 ## [2.2.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.2...v2.2.3) (2026-05-26)
 
 
