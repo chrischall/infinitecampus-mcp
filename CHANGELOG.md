@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.0...v2.3.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* **ci:** auto-merge arm guards ([#42](https://github.com/chrischall/infinitecampus-mcp/issues/42)) ([4bcf52e](https://github.com/chrischall/infinitecampus-mcp/commit/4bcf52e3cdc1a8380eef91605f6aba4e6213b3c4))
+
 ## [2.3.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.2.3...v2.3.0) (2026-05-27)
 
 
