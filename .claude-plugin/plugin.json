@@ -1,7 +1,7 @@
 {
   "name": "infinitecampus-mcp",
   "displayName": "Infinite Campus",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Infinite Campus (Campus Parent) MCP server for Claude — grades, attendance, assignments, messages, and documents",
   "author": {
     "name": "Chris Hall",

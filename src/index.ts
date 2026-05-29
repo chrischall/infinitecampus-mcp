@@ -53,7 +53,7 @@ try {
   configError = e as Error;
 }
 
-const server = new McpServer({ name: 'infinitecampus', version: '2.3.0' }); // x-release-please-version
+const server = new McpServer({ name: 'infinitecampus', version: '2.3.1' }); // x-release-please-version
 
 if (account) {
   const client = new ICClient(account, { preloaded });
