@@ -14,7 +14,6 @@ await loadDotenvSafely({
   override: false,
 });
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Account } from './config.js';
 import { resolveAuth, type ResolvedAuth } from './auth.js';
 import { ICClient } from './client.js';
