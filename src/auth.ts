@@ -49,6 +49,7 @@
 
 import { bootstrap } from '@fetchproxy/bootstrap';
 import { classifyBridgeError, FetchproxyBridgeDownError } from '@fetchproxy/server';
+import { parseBoolEnv } from '@chrischall/mcp-utils';
 import { loadAccount, type Account } from './config.js';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -75,20 +76,11 @@ export interface ResolvedAuth {
   source: 'env' | 'fetchproxy';
 }
 
-function readEnv(key: string): string | undefined {
-  const raw = process.env[key];
-  if (typeof raw !== 'string') return undefined;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return undefined;
-  if (trimmed === 'undefined' || trimmed === 'null') return undefined;
-  if (/^\$\{[^}]*\}$/.test(trimmed)) return undefined;
-  return trimmed;
-}
-
 function fetchproxyDisabled(): boolean {
-  const raw = readEnv('IC_DISABLE_FETCHPROXY');
-  if (raw === undefined) return false;
-  return ['1', 'true', 'yes', 'on'].includes(raw.toLowerCase());
+  // mcp-utils' parseBoolEnv applies the same defensive env reading (trim,
+  // placeholder/sentinel suppression) and the `1|true|yes|on` truth tokens
+  // this flag has always recognised. Unset → false (fetchproxy enabled).
+  return parseBoolEnv('IC_DISABLE_FETCHPROXY', { default: false });
 }
 
 /**

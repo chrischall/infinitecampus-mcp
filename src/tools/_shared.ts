@@ -1,3 +1,5 @@
+import { textResult } from '@chrischall/mcp-utils';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ICClient } from '../client.js';
 
 export interface RawEnrollment {
@@ -17,9 +19,14 @@ export interface RawStudent {
   enrollments?: RawEnrollment[];
 }
 
-/** Wrap a value as an MCP text content block — the standard tool return shape. */
-export function textContent(data: unknown): { content: [{ type: 'text'; text: string }] } {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+/**
+ * Wrap a value as an MCP text content block — the standard tool return shape.
+ * Thin re-export of mcp-utils' `textResult` so the whole fleet shares one
+ * pretty-printed-JSON formatter; the local name is kept to avoid churning
+ * every tool call site.
+ */
+export function textContent(data: unknown): CallToolResult {
+  return textResult(data);
 }
 
 /** Detect "IC 404 ..." errors thrown by ICClient.request for endpoints that don't exist. */
@@ -65,7 +72,7 @@ export async function checkFeatureDisabled(
   flag: string,
   toolName: string,
   emptyData: unknown = [],
-): Promise<{ content: [{ type: 'text'; text: string }] } | null> {
+): Promise<CallToolResult | null> {
   const structureID = student.enrollments?.[0]?.structureID;
   if (!structureID) return null;
   try {
