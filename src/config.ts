@@ -1,16 +1,15 @@
+import { readEnvVar } from '@chrischall/mcp-utils';
+
 /**
  * Read an env var, trim whitespace, and treat as unset if blank or if the value
  * looks like an unsubstituted shell placeholder (e.g. `${FOO}`) — defends
  * against MCP hosts that pass .mcp.json env blocks through unexpanded.
+ *
+ * Thin adapter over mcp-utils' `readEnvVar` (same defensive semantics), keeping
+ * the local `(env, key)` arg order so the call sites below stay unchanged.
  */
 function readVar(env: Record<string, string | undefined>, key: string): string | undefined {
-  const raw = env[key];
-  if (typeof raw !== 'string') return undefined;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return undefined;
-  if (trimmed === 'undefined' || trimmed === 'null') return undefined;
-  if (/^\$\{[^}]*\}$/.test(trimmed)) return undefined;
-  return trimmed;
+  return readEnvVar(key, { env });
 }
 
 export interface Account {

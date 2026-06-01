@@ -1,5 +1,6 @@
 import { writeFile, stat } from 'fs/promises';
 import { dirname } from 'path';
+import { parseCookieJar } from '@chrischall/mcp-utils';
 import type { Account } from './config.js';
 
 interface Session {
@@ -389,42 +390,23 @@ export class ICClient {
 }
 
 /**
- * Parse Set-Cookie headers into a deduplicated cookie string + XSRF token.
- *
- * IC's login response sets ~20 cookies including deletion markers (Max-Age=0).
- * Sending both `appName=` (delete) and `appName=springfield` (set) causes IC to
- * reject requests with "conflicting app name values". This parser:
- * - Filters out cookies with Max-Age=0 (deletion markers)
- * - Deduplicates by name (last value wins)
- * - Extracts XSRF-TOKEN separately for the X-XSRF-TOKEN request header
+ * Parse Set-Cookie headers into a deduplicated Cookie header + XSRF token via
+ * `parseCookieJar` (see inline comment for the splitter/jar details).
  */
 function parseSetCookies(headers: Headers): { cookieHeader: string; xsrfToken: string } {
+  // Prefer the structured getSetCookie() split (one cookie per array entry,
+  // what real Node fetch Responses provide). Only when it's unavailable do we
+  // fall back to naively comma-splitting the joined header — kept identical to
+  // the original so the edge-case behavior (commas inside attribute lists) is
+  // preserved rather than inheriting parseCookieJar's smarter-but-different
+  // splitter. parseCookieJar then does the jar logic: drop deletion markers
+  // (Max-Age=0 / expired Expires) and empty values, dedupe by name. That's
+  // load-bearing so the synthesized Cookie header never carries both the
+  // `appName=` deletion and the real value (IC rejects "conflicting app name").
   const raw = headers.getSetCookie?.() ?? [];
-  const headerStrings = raw.length > 0 ? raw : splitFallback(headers.get('set-cookie'));
-
-  const jar = new Map<string, string>();
-  let xsrfToken = '';
-
-  for (const entry of headerStrings) {
-    // Check for Max-Age=0 → this is a cookie deletion, skip it
-    if (/Max-Age=0/i.test(entry)) continue;
-
-    const nameValue = entry.split(';')[0].trim();
-    const eqIdx = nameValue.indexOf('=');
-    if (eqIdx < 1) continue;
-
-    const name = nameValue.substring(0, eqIdx);
-    const value = nameValue.substring(eqIdx + 1);
-
-    // Skip cookies with empty values (clearing instructions)
-    if (!value) continue;
-
-    jar.set(name, value);
-    if (name === 'XSRF-TOKEN') xsrfToken = value;
-  }
-
-  const cookieHeader = [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
-  return { cookieHeader, xsrfToken };
+  const entries = raw.length > 0 ? raw : splitFallback(headers.get('set-cookie'));
+  const { cookies, cookieHeader } = parseCookieJar(entries);
+  return { cookieHeader, xsrfToken: cookies['XSRF-TOKEN'] ?? '' };
 }
 
 function splitFallback(header: string | null): string[] {

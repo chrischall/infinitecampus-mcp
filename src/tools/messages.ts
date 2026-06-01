@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { extractPlainTextFromHtml } from '@chrischall/mcp-utils/html';
 import type { ICClient } from '../client.js';
 import { textContent, toArray } from './_shared.js';
 
@@ -88,7 +89,9 @@ export function normalizeMessageUrl(input: string): string {
  * The HTML has:
  *   <title>Message -- <subject></title>
  *   body with "Message: <subject>", "Date: MM/DD/YYYY", then the message body.
- * Dependency-free: no DOM parser, just regex + tag stripping.
+ * Dependency-free: title via regex, body via mcp-utils'
+ * `extractPlainTextFromHtml` (script/style strip + tag strip + entity decode +
+ * whitespace collapse — the shared fleet helper this extractor was hoisted from).
  */
 export function parseMessageHtml(
   html: string,
@@ -99,22 +102,9 @@ export function parseMessageHtml(
   let subject = titleMatch ? titleMatch[1].trim() : '';
   subject = subject.replace(/^Message\s*--\s*/i, '');
 
-  // Strip <script> and <style> blocks first
-  let text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ');
-  // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, ' ');
-  // Decode a few common entities
-  text = text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-  // Collapse whitespace
-  text = text.replace(/\s+/g, ' ').trim();
+  // Strip the body down to plain text (script/style content removed, tags
+  // dropped, entities decoded, whitespace collapsed).
+  const text = extractPlainTextFromHtml(html);
 
   // Extract "Date: MM/DD/YYYY" if present
   const dateMatch = text.match(/Date:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
