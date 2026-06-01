@@ -390,14 +390,8 @@ export class ICClient {
 }
 
 /**
- * Parse Set-Cookie headers into a deduplicated cookie string + XSRF token.
- *
- * IC's login response sets ~20 cookies including deletion markers (Max-Age=0).
- * Sending both `appName=` (delete) and `appName=springfield` (set) causes IC to
- * reject requests with "conflicting app name values". This parser:
- * - Filters out cookies with Max-Age=0 (deletion markers)
- * - Deduplicates by name (last value wins)
- * - Extracts XSRF-TOKEN separately for the X-XSRF-TOKEN request header
+ * Parse Set-Cookie headers into a deduplicated Cookie header + XSRF token via
+ * `parseCookieJar` (see inline comment for the splitter/jar details).
  */
 function parseSetCookies(headers: Headers): { cookieHeader: string; xsrfToken: string } {
   // Prefer the structured getSetCookie() split (one cookie per array entry,
