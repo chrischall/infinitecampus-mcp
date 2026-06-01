@@ -42,7 +42,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^0.1.0",
+    "@chrischall/mcp-utils": "^0.1.1",
     "@fetchproxy/bootstrap": "^0.11.1",
     "@fetchproxy/server": "^0.11.1",
     "@modelcontextprotocol/sdk": "^1.29.0",

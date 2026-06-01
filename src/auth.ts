@@ -48,7 +48,7 @@
 //     legacy paths keep working unchanged.
 
 import { bootstrap } from '@fetchproxy/bootstrap';
-import { classifyBridgeError, FetchproxyBridgeDownError } from '@fetchproxy/server';
+import { classifyBridgeError, FetchproxyBridgeDownError } from '@chrischall/mcp-utils/fetchproxy';
 import { parseBoolEnv } from '@chrischall/mcp-utils';
 import { loadAccount, type Account } from './config.js';
 import pkg from '../package.json' with { type: 'json' };
