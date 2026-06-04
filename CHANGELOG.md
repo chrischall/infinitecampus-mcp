@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.1...v2.3.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* adopt @fetchproxy/server 0.13.0 (bridge host failover + re-pairing) ([#55](https://github.com/chrischall/infinitecampus-mcp/issues/55)) ([8868377](https://github.com/chrischall/infinitecampus-mcp/commit/886837719637596a0a8643fc782b5e0d53d3959d))
+* adopt @fetchproxy/server 1.0.0 + @chrischall/mcp-utils 0.5.0 ([#57](https://github.com/chrischall/infinitecampus-mcp/issues/57)) ([757ae30](https://github.com/chrischall/infinitecampus-mcp/commit/757ae304d3961a48cef01351c2298b21dbf67948))
+
 ## [2.3.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.0...v2.3.1) (2026-05-29)
 
 

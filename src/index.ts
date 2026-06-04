@@ -64,7 +64,7 @@ try {
 // actionable stderr message (banner) instead of a crash loop.
 const COMMON: Pick<RunMcpOptions, 'name' | 'version'> = {
   name: 'infinitecampus',
-  version: '2.3.1', // x-release-please-version
+  version: '2.3.2', // x-release-please-version
 };
 
 if (account) {
