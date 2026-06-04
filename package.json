@@ -43,8 +43,8 @@
   },
   "dependencies": {
     "@chrischall/mcp-utils": "^0.1.1",
-    "@fetchproxy/bootstrap": "^0.11.1",
-    "@fetchproxy/server": "^0.11.1",
+    "@fetchproxy/bootstrap": "^0.13.0",
+    "@fetchproxy/server": "^0.13.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "node-html-parser": "^7.1.0",
