@@ -31,6 +31,12 @@ describe('AuthFailedError', () => {
   it('includes the reason in parens when provided', () => {
     const e = new AuthFailedError('anoka', 'wrong creds');
     expect(e.message).toContain("Login failed for district 'anoka' (wrong creds)");
+    expect(e.message).toContain('Check IC_USERNAME and IC_PASSWORD');
+  });
+  it('omits the credential suffix when credentialHint is false', () => {
+    const e = new AuthFailedError('d2', 'SSO re-discovery failed', { credentialHint: false });
+    expect(e.message).not.toContain('Check IC_USERNAME');
+    expect(e.message).toContain('Sign in again at the IC portal');
   });
 });
 
@@ -964,6 +970,130 @@ describe('ICClient — CUPS linked district discovery', () => {
     expect(result).toEqual({ data: 'refreshed' });
   });
 
+  it('re-authenticates an expired linked-district session via the primary, not a placeholder POST', async () => {
+    // Reproduces the bug where a linked-district session that expires by TTL
+    // (not a 401) routes through login(), which POSTed the synthetic
+    // '(linked)'/'(linked)' creds to the linked district's verify.jsp →
+    // password-error → misleading "Check IC_USERNAME and IC_PASSWORD".
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let linkedVerifyCalls = 0;
+
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('anoka.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=primary; Path=/, XSRF-TOKEN=xsrf1; Path=/' } });
+      }
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [linkedAccount] }), { status: 200 });
+      }
+      if (u.includes('/cups/loginToken')) {
+        return new Response(JSON.stringify({ token: { token: 'jwt123' } }), { status: 200 });
+      }
+      if (u.includes('/userAccountSwitch/originalDistrict')) {
+        return new Response(JSON.stringify({ clientID: 'orig123' }), { status: 200 });
+      }
+      if (u.includes('/districts/current')) {
+        return new Response(JSON.stringify({ name: 'Anoka District' }), { status: 200 });
+      }
+      if (u.includes('d2.infinitecampus.org/campus/verify.jsp')) {
+        linkedVerifyCalls++;
+        const body = init?.body != null ? String(init.body) : '';
+        // The CUPS switch carries a cupsToken in the form body. A buggy direct
+        // re-login would POST the placeholder creds in the URL query string
+        // (?username=(linked)&password=(linked)) and IC returns password-error.
+        if (u.includes('username=') || body.includes('(linked)') || !body.includes('cupsToken')) {
+          return new Response('<AUTHENTICATION>password-error</AUTHENTICATION>', { status: 200 });
+        }
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': 'JSESSIONID=linked-sess2; Path=/, XSRF-TOKEN=xsrf-linked2; Path=/' },
+        });
+      }
+      return new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    const client = new ICClient(primaryAccount);
+    // Prime: primary login + CUPS discovery establishes the linked session.
+    await client.request('anoka', '/campus/api/test');
+    expect(client.listDistricts()).toHaveLength(2);
+    const verifyCallsAfterDiscovery = linkedVerifyCalls;
+
+    // Force TTL expiry on ALL sessions (linked + primary).
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 6 * 60 * 60 * 1000);
+
+    // Request the linked district after its session expired. This must NOT
+    // throw AuthFailedError and must re-auth through the primary's CUPS flow.
+    const result = await client.request<{ data: string }>('district2', '/campus/api/test');
+    expect(result).toEqual({ data: 'ok' });
+
+    // The linked district must only ever be reached via the CUPS switch POST
+    // (form body with cupsToken) — never a placeholder verify.jsp re-login.
+    expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('password-error'));
+    // No misleading bad-credentials surfaced.
+    expect(linkedVerifyCalls).toBeGreaterThan(verifyCallsAfterDiscovery); // re-auth happened via CUPS
+
+    errorSpy.mockRestore();
+  });
+
+  it('surfaces a clear error when a TTL-expired linked session cannot be re-established', async () => {
+    // If the primary re-login succeeds but re-discovery no longer restores the
+    // linked district (e.g. CUPS loginToken now fails), login() must throw an
+    // AuthFailedError naming the linked district rather than leaving a null
+    // session for callers.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let loginTokenCalls = 0;
+
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes('anoka.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=p; Path=/' } });
+      }
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [linkedAccount] }), { status: 200 });
+      }
+      if (u.includes('/cups/loginToken')) {
+        loginTokenCalls++;
+        // First discovery succeeds; the re-discovery after TTL expiry fails,
+        // so the linked session is not restored.
+        if (loginTokenCalls === 1) {
+          return new Response(JSON.stringify({ token: { token: 'jwt' } }), { status: 200 });
+        }
+        return new Response('', { status: 403 });
+      }
+      if (u.includes('/userAccountSwitch/originalDistrict')) {
+        return new Response(JSON.stringify({ clientID: 'c' }), { status: 200 });
+      }
+      if (u.includes('/districts/current')) {
+        return new Response(JSON.stringify({ name: 'P' }), { status: 200 });
+      }
+      if (u.includes('d2.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': 'JSESSIONID=l; Path=/' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    const client = new ICClient(primaryAccount);
+    await client.request('anoka', '/campus/api/test');
+    expect(client.listDistricts()).toHaveLength(2);
+
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 6 * 60 * 60 * 1000);
+
+    await expect(client.request('district2', '/campus/api/test')).rejects.toThrow(
+      /could not be re-established via the primary district/,
+    );
+    // The creds are known-good here (SSO re-discovery failed), so the message
+    // must NOT point the user at IC_USERNAME/IC_PASSWORD.
+    await expect(client.request('district2', '/campus/api/test')).rejects.toThrow(
+      /Sign in again at the IC portal/,
+    );
+    errorSpy.mockRestore();
+  });
+
   it('does not re-discover linked districts when logging in a linked district', async () => {
     // Set up happy path, then force TTL expiry on linked district only.
     // The re-login of primary (triggered by 401 on linked) should re-discover,
@@ -1079,11 +1209,16 @@ describe('ICClient — CUPS linked district discovery', () => {
     errorSpy.mockRestore();
   });
 
-  it('skips discovery when login is called for a linked district (TTL expiry path)', async () => {
-    // Covers line 95: linkedTo.has(account.name) === true → skip discoverLinkedDistricts
+  it('re-authenticates a TTL-expired linked district through the primary (no placeholder verify.jsp)', async () => {
+    // When a linked-district session expires by TTL, login() routes through the
+    // primary's CUPS re-discovery instead of POSTing the synthetic '(linked)'
+    // creds to the linked district's own verify.jsp. The primary re-login runs
+    // discoverLinkedDistricts exactly once; the linked district never POSTs a
+    // direct placeholder login.
     let linkedAccountsFetchCount = 0;
+    let linkedVerifyCount = 0;
 
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
       if (u.includes('anoka.infinitecampus.org/campus/verify.jsp')) {
         return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=p; Path=/' } });
@@ -1102,6 +1237,11 @@ describe('ICClient — CUPS linked district discovery', () => {
         return new Response(JSON.stringify({ name: 'P' }), { status: 200 });
       }
       if (u.includes('d2.infinitecampus.org/campus/verify.jsp')) {
+        linkedVerifyCount++;
+        // Only the CUPS switch (form body with cupsToken) is legitimate.
+        const body = init?.body != null ? String(init.body) : '';
+        expect(u).not.toContain('username=');
+        expect(body).toContain('cupsToken');
         return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
           status: 200,
           headers: { 'set-cookie': 'JSESSIONID=l; Path=/' },
@@ -1113,18 +1253,19 @@ describe('ICClient — CUPS linked district discovery', () => {
     const client = new ICClient(primaryAccount);
     await client.request('anoka', '/campus/api/test');
     expect(linkedAccountsFetchCount).toBe(1);
+    expect(linkedVerifyCount).toBe(1); // initial CUPS switch during discovery
     expect(client.listDistricts()).toHaveLength(2);
 
-    // Force TTL expiry on linked district to trigger login() on the synthetic account
+    // Force TTL expiry on every session to trigger login() on the synthetic account
     const sixHoursMs = 6 * 60 * 60 * 1000;
     const realNow = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
 
-    // This will call ensureSession → login on the linked district.
-    // login() succeeds (mock returns cookie for d2 verify.jsp) but does NOT call discoverLinkedDistricts.
+    // ensureSession → login on the linked district routes through the primary,
+    // which re-runs discovery (one more linkedAccounts call + one more CUPS switch).
     await client.request('district2', '/campus/api/test');
-    // linkedAccounts should NOT have been called again (only primary login triggers discovery)
-    expect(linkedAccountsFetchCount).toBe(1);
+    expect(linkedAccountsFetchCount).toBe(2); // primary re-login re-discovered
+    expect(linkedVerifyCount).toBe(2);        // re-established via CUPS switch, not placeholder
   });
 
   it('handles non-Error throw in per-account CUPS catch block', async () => {
