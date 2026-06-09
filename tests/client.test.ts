@@ -124,6 +124,60 @@ describe('ICClient.request — login + GET', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
+  it('sends credentials in the POST form body, never in the URL query string', async () => {
+    // Security: credentials in URLs land in proxy/LB/server access logs even
+    // over HTTPS. The login POST must carry username+password in a
+    // urlencoded form body, mirroring the CUPS switch POST against the same host.
+    const credAccount: Account = {
+      name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka',
+      username: 'parent-jdoe', password: 'sup3r-secret-pw',
+    };
+    const client = new ICClient(credAccount);
+    mockLoginThenGet({ ok: true });
+
+    await client.request('anoka', '/campus/api/portal/parents/students');
+
+    // First fetch call is the login POST.
+    const [loginUrl, loginInit] = fetchSpy.mock.calls[0];
+    const urlStr = String(loginUrl);
+
+    // The verify.jsp URL must NOT contain the password or username.
+    expect(urlStr).toContain('/campus/verify.jsp');
+    expect(urlStr).not.toContain('password');
+    expect(urlStr).not.toContain('username');
+    expect(urlStr).not.toContain(credAccount.password);
+    expect(urlStr).not.toContain(credAccount.username);
+
+    // Method + content-type + body shape.
+    expect(loginInit?.method).toBe('POST');
+    const headers = loginInit?.headers as Record<string, string> | undefined;
+    expect(headers?.['Content-Type']).toBe('application/x-www-form-urlencoded');
+
+    const body = String(loginInit?.body ?? '');
+    const params = new URLSearchParams(body);
+    expect(params.get('username')).toBe(credAccount.username);
+    expect(params.get('password')).toBe(credAccount.password);
+    expect(params.get('appName')).toBe(credAccount.district);
+    expect(params.get('portalLoginPage')).toBe('parents');
+  });
+
+  it('encodes special characters in form-body credentials', async () => {
+    const specialAccount: Account = {
+      name: 'spec', baseUrl: 'https://spec.infinitecampus.org', district: 'spec',
+      username: 'user name+1', password: 'p@ss&w/rd=secret',
+    };
+    const client = new ICClient(specialAccount);
+    mockLoginThenGet({ ok: true });
+
+    await client.request('spec', '/campus/api/x');
+
+    const [loginUrl, loginInit] = fetchSpy.mock.calls[0];
+    expect(String(loginUrl)).not.toContain('secret');
+    const params = new URLSearchParams(String(loginInit?.body ?? ''));
+    expect(params.get('username')).toBe('user name+1');
+    expect(params.get('password')).toBe('p@ss&w/rd=secret');
+  });
+
   it('throws UnknownDistrictError when district not configured (after CUPS discovery)', async () => {
     // request() now triggers ensureDiscovery on cache miss to handle linked
     // districts that haven't been discovered yet. If the district is still
@@ -145,7 +199,7 @@ describe('ICClient.request — login + GET', () => {
     let primaryLoggedIn = false;
     fetchSpy.mockImplementation(async (url) => {
       const u = String(url);
-      if (u.includes('/campus/verify.jsp') && u.includes('appName=anoka')) {
+      if (u.includes('anoka.infinitecampus.org/campus/verify.jsp')) {
         primaryLoggedIn = true;
         return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
           status: 200,
