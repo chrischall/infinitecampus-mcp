@@ -77,10 +77,9 @@ export class ICClient {
     await this.ensureSession(this.accounts.get(this.primaryName)!);
     // fetchproxy mode skips login() and therefore the discovery call inside
     // it. Run discovery directly the first time someone asks for it. The
-    // primary is never in linkedTo (it's the root of the linkedTo map), so
-    // no need to guard on that — the existing guard inside login() is for
-    // the inverse case where login() is called for an already-linked
-    // district during a TTL refresh.
+    // primary is never in linkedTo (it's the root of the linkedTo map). When
+    // login() is called for an already-linked district during a TTL refresh,
+    // it re-auths through the primary instead of running discovery itself.
     if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan) {
       this.fetchproxyDiscoveryRan = true;
       await this.discoverLinkedDistricts(this.accounts.get(this.primaryName)!);
@@ -152,11 +151,35 @@ export class ICClient {
   }
 
   private async login(account: Account): Promise<void> {
+    // Linked districts have no real credentials of their own — they hold
+    // synthetic '(linked)' placeholders and are authenticated by the primary's
+    // CUPS SSO switch, not by their own verify.jsp. When a linked-district
+    // session expires by TTL (vs. a 401, which doRequest already routes through
+    // the primary), ensureSession lands here. Re-login the primary, which
+    // re-runs discoverLinkedDistricts and re-establishes this district's
+    // session — POSTing the placeholder creds to verify.jsp would instead yield
+    // a misleading password-error. See the comment block at the top of the file.
+    const primaryName = this.linkedTo.get(account.name);
+    if (primaryName) {
+      // Drop the stale linked session so re-discovery installs a fresh one.
+      this.sessions.delete(account.name);
+      const primaryAccount = this.accounts.get(primaryName)!;
+      await this.ensureSession(primaryAccount);
+      // ensureSession(primary) re-ran login() → discoverLinkedDistricts(),
+      // which re-creates the linked session. If discovery failed to restore it,
+      // surface a clear error rather than leaving callers with a null session.
+      if (!this.sessions.has(account.name)) {
+        throw new AuthFailedError(
+          account.name,
+          'linked-district session could not be re-established via the primary district',
+        );
+      }
+      return;
+    }
+
     // fetchproxy mode: empty primary creds, can't post to verify.jsp.
     // The user must re-sign-in in the browser (and the next process start
-    // will pick up the fresh cookies). Linked accounts have placeholder
-    // creds too; their re-auth flows through the primary via CUPS, not
-    // verify.jsp directly.
+    // will pick up the fresh cookies).
     if (!account.username || !account.password) {
       throw new AuthFailedError(
         account.name,
@@ -204,10 +227,11 @@ export class ICClient {
     session.xsrfToken = cookies.xsrfToken;
     session.loggedInAt = Date.now();
 
-    // Discover linked districts (CUPS SSO) — non-blocking, errors logged not thrown
-    if (!this.linkedTo.has(account.name)) {
-      await this.discoverLinkedDistricts(account);
-    }
+    // Discover linked districts (CUPS SSO) — non-blocking, errors logged not
+    // thrown. By construction we only reach here for the primary (or fetchproxy
+    // primary): linked districts return early above and re-auth via the primary,
+    // so no `linkedTo` guard is needed.
+    await this.discoverLinkedDistricts(account);
   }
 
   private async discoverLinkedDistricts(account: Account): Promise<void> {
