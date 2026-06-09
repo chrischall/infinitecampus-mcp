@@ -172,6 +172,7 @@ export class ICClient {
         throw new AuthFailedError(
           account.name,
           'linked-district session could not be re-established via the primary district',
+          { credentialHint: false },
         );
       }
       return;
@@ -446,13 +447,24 @@ export class UnknownDistrictError extends Error {
 }
 
 export class AuthFailedError extends Error {
-  constructor(public district: string, public reason?: string) {
+  /**
+   * @param opts.credentialHint When `false`, the message omits the
+   *   "Check IC_USERNAME and IC_PASSWORD" suffix — used for failures where the
+   *   credentials are known-good (e.g. a linked-district CUPS/SSO re-discovery
+   *   failure) and pointing the user at their creds would be misleading.
+   */
+  constructor(
+    public district: string,
+    public reason?: string,
+    opts?: { credentialHint?: boolean },
+  ) {
     const detail = reason ? ` (${reason})` : '';
-    super(
-      `Login failed for district '${district}'${detail}. ` +
-      `Check IC_USERNAME and IC_PASSWORD; ` +
-      `if those are correct, the account may be locked or the portal may be down.`,
-    );
+    const remedy =
+      opts?.credentialHint === false
+        ? 'Sign in again at the IC portal in your browser, then restart the MCP.'
+        : 'Check IC_USERNAME and IC_PASSWORD; ' +
+          'if those are correct, the account may be locked or the portal may be down.';
+    super(`Login failed for district '${district}'${detail}. ${remedy}`);
     this.name = 'AuthFailedError';
   }
 }

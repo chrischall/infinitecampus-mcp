@@ -31,6 +31,12 @@ describe('AuthFailedError', () => {
   it('includes the reason in parens when provided', () => {
     const e = new AuthFailedError('anoka', 'wrong creds');
     expect(e.message).toContain("Login failed for district 'anoka' (wrong creds)");
+    expect(e.message).toContain('Check IC_USERNAME and IC_PASSWORD');
+  });
+  it('omits the credential suffix when credentialHint is false', () => {
+    const e = new AuthFailedError('d2', 'SSO re-discovery failed', { credentialHint: false });
+    expect(e.message).not.toContain('Check IC_USERNAME');
+    expect(e.message).toContain('Sign in again at the IC portal');
   });
 });
 
@@ -1025,6 +1031,11 @@ describe('ICClient — CUPS linked district discovery', () => {
 
     await expect(client.request('district2', '/campus/api/test')).rejects.toThrow(
       /could not be re-established via the primary district/,
+    );
+    // The creds are known-good here (SSO re-discovery failed), so the message
+    // must NOT point the user at IC_USERNAME/IC_PASSWORD.
+    await expect(client.request('district2', '/campus/api/test')).rejects.toThrow(
+      /Sign in again at the IC portal/,
     );
     errorSpy.mockRestore();
   });
