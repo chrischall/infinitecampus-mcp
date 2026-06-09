@@ -167,9 +167,21 @@ export class ICClient {
 
     // ic_parent_api's pattern: single POST to verify.jsp, let the response
     // set cookies. No pre-login GET needed (unlike OFW's Spring Security).
+    // Credentials go in the urlencoded form body, NOT the URL query string —
+    // query-string creds land in proxy/LB/server access logs even over HTTPS.
+    // Mirrors the CUPS switch POST body construction against the same host.
     const postRes = await fetch(
-      `${account.baseUrl}/campus/verify.jsp?nonBrowser=true&username=${encodeURIComponent(account.username)}&password=${encodeURIComponent(account.password)}&appName=${encodeURIComponent(account.district)}&portalLoginPage=parents`,
-      { method: 'POST' },
+      `${account.baseUrl}/campus/verify.jsp?nonBrowser=true`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          username: account.username,
+          password: account.password,
+          appName: account.district,
+          portalLoginPage: 'parents',
+        }).toString(),
+      },
     );
 
     if (postRes.status >= 500) throw new PortalUnreachableError(account.name, postRes.status);
