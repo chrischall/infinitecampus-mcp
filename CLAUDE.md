@@ -168,20 +168,13 @@ Version appears in SEVEN places — all must match:
 6. `.claude-plugin/plugin.json` → `"version"`
 7. `.claude-plugin/marketplace.json` → `metadata.version` and `plugins[].version`
 
+### Release flow
+
+Commits land on `main` via PR. release-please (`.github/workflows/release-please.yml`) opens or updates a `chore(main): release X.Y.Z` PR whenever Conventional-Commit messages (`feat:`, `fix:`, etc.) accumulate. Merging the release PR (arm `ready-to-merge`) creates the tag and a GitHub Release; the `publish` job then packs `.mcpb` + `.skill`, publishes to npm with provenance, and pushes to the MCP Registry.
+
 ### Important
 
-Do NOT manually bump versions or create tags unless the user explicitly asks. Versioning is handled by the **Tag & Bump** GitHub Action (`.github/workflows/tag-and-bump.yml`).
-
-### Release workflow
-
-Main is always one version ahead of the latest tag. To release, run **Tag & Bump** (workflow_dispatch) which:
-
-1. Reuses `ci.yml` (build + test)
-2. Tags the current commit with the current version
-3. `npm version patch` + a node script that walks every JSON version field, plus a `sed` on `src/index.ts`
-4. Verifies the build, commits `chore: bump version to vX.Y.Z`, pushes main + tag
-
-The tag push triggers `.github/workflows/release.yml`: rebuild, sync version files, package `.skill`, build `.mcpb`, `npm publish --provenance`, publish to the MCP Registry, optionally publish the skill to ClawHub, and create a GitHub Release with auto-generated notes.
+Do NOT manually bump versions or create tags unless the user explicitly asks. release-please owns versioning.
 
 ## Gotchas
 
