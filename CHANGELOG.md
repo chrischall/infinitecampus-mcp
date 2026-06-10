@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.2...v2.3.3) (2026-06-09)
+
+
+### Bug Fixes
+
+* re-auth expired linked-district sessions via the primary, not placeholder creds ([#61](https://github.com/chrischall/infinitecampus-mcp/issues/61)) ([9f37420](https://github.com/chrischall/infinitecampus-mcp/commit/9f37420b549241325c34ec5d8f2c29c5f3467c76))
+
 ## [2.3.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.1...v2.3.2) (2026-06-04)
 
 
