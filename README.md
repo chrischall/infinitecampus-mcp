@@ -1,5 +1,9 @@
 # infinitecampus-mcp
 
+[![CI](https://github.com/chrischall/infinitecampus-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/chrischall/infinitecampus-mcp/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/infinitecampus-mcp)](https://www.npmjs.com/package/infinitecampus-mcp)
+[![license](https://img.shields.io/npm/l/infinitecampus-mcp)](LICENSE)
+
 MCP server for Infinite Campus (Campus Parent portal). Single-account config — linked districts are auto-discovered via CUPS SSO after login.
 
 ## Tools
