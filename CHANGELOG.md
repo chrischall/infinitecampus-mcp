@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.3...v2.3.4) (2026-06-13)
+
+
+### Bug Fixes
+
+* bot PRs bypass the CI gate unconditionally (upstream curtaincall[#86](https://github.com/chrischall/infinitecampus-mcp/issues/86) review) ([#68](https://github.com/chrischall/infinitecampus-mcp/issues/68)) ([f575895](https://github.com/chrischall/infinitecampus-mcp/commit/f575895f110df3eb8d59161ce21d33b677495fdd))
+
+
+### Documentation
+
+* add MIT LICENSE file and README badges ([#66](https://github.com/chrischall/infinitecampus-mcp/issues/66)) ([5d962e9](https://github.com/chrischall/infinitecampus-mcp/commit/5d962e91d3c8cdfe3c6b4bc85b5039b722cb217e))
+* correct release flow to describe release-please ([#64](https://github.com/chrischall/infinitecampus-mcp/issues/64)) ([85e08bb](https://github.com/chrischall/infinitecampus-mcp/commit/85e08bb17f14854305fdf9691ccf48eaea959327))
+
 ## [2.3.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.2...v2.3.3) (2026-06-09)
 
 
