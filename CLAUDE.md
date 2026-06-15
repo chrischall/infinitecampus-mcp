@@ -22,9 +22,11 @@ All tools are prefixed `ic_` (e.g. `ic_list_grades`, `ic_get_schedule`). Every p
 
 ```
 src/
-  index.ts             # MCP server entry — registers all tools, stdio transport
+  index.ts             # MCP server entry — loadDotenvSafely + runMcp (both from
+                       #   @chrischall/mcp-utils): registers all tools, stdio transport, graceful shutdown
   auth.ts              # resolveAuth(): two-path priority (env vars → fetchproxy fallback). Pattern A template
-  config.ts            # loadAccount() — IC_* env loader. IC_BASE_URL+IC_DISTRICT required;
+  config.ts            # loadAccount() — IC_* env loader over mcp-utils readEnvVar.
+                       #   IC_BASE_URL+IC_DISTRICT required;
                        #   IC_USERNAME+IC_PASSWORD optional (both or neither — partial = error)
   client.ts            # ICClient — per-district session pool, lazy login, 401 retry,
                        #   CUPS linked-district discovery, download(). Accepts preloaded cookies
@@ -65,7 +67,7 @@ IC_NAME=<friendly name>                               # optional, defaults to IC
 IC_DISABLE_FETCHPROXY=1                               # optional, "1|true|yes|on" → skip fetchproxy fallback
 ```
 
-`loadAccount()` trims whitespace and treats blanks, the literals `undefined`/`null`, and unsubstituted `${FOO}` placeholders as missing — protects against MCP hosts passing `.mcp.json` env blocks through unexpanded. Loaded via `dotenv` from `.env` at process start (`quiet: true`; stdout is reserved for JSON-RPC). Partial creds (one of IC_USERNAME/IC_PASSWORD set without the other) are treated as a user mistake and throw rather than falling through to fetchproxy — masking typos would be worse than failing loudly.
+`loadAccount()` trims whitespace and treats blanks, the literals `undefined`/`null`, and unsubstituted `${FOO}` placeholders as missing (via mcp-utils' `readEnvVar`) — protects against MCP hosts passing `.mcp.json` env blocks through unexpanded. `.env` is loaded at process start by `loadDotenvSafely` (mcp-utils; forces dotenv's `quiet: true` since stdout is reserved for JSON-RPC). Partial creds (one of IC_USERNAME/IC_PASSWORD set without the other) are treated as a user mistake and throw rather than falling through to fetchproxy — masking typos would be worse than failing loudly.
 
 Linked districts (parent has kids in 2+ IC instances under the same SSO) are added dynamically by `ICClient.discoverLinkedDistricts()` after primary login — no extra config. For truly separate credentials, run two MCP instances. In fetchproxy mode, discovery runs lazily on the first primary-district request (since `login()` is skipped).
 
@@ -74,7 +76,7 @@ Linked districts (parent has kids in 2+ IC instances under the same SSO) are add
 `src/auth.ts` is the canonical "browser-bootstrap + Node-direct" shape used across our MCP family (ofw-mcp, resy-mcp, opentable-mcp, zola-mcp, signupgenius-mcp, …). Two paths, priority order:
 
 1. **Env-var credentials** (`IC_USERNAME` + `IC_PASSWORD` + `IC_BASE_URL` + `IC_DISTRICT`) → `loadAccount()` returns a full Account; `ICClient.login()` POSTs to `verify.jsp` exactly as before. Unchanged from pre-fetchproxy behavior.
-2. **fetchproxy fallback** → `@fetchproxy/bootstrap` (0.3.0+) opens a one-shot WebSocket bridge to the extension, reads `JSESSIONID` (HttpOnly, via `chrome.cookies.get`) + `XSRF-TOKEN` from a signed-in IC portal tab, closes the bridge. The client gets pre-loaded cookies in place of running `verify.jsp`. All subsequent IC calls go out via plain Node `fetch()` — fetchproxy is NOT in the request hot path.
+2. **fetchproxy fallback** → `@fetchproxy/bootstrap` opens a one-shot WebSocket bridge to the extension, reads `JSESSIONID` (HttpOnly, via `chrome.cookies.get`) + `XSRF-TOKEN` from a signed-in IC portal tab, closes the bridge. The client gets pre-loaded cookies in place of running `verify.jsp`. All subsequent IC calls go out via plain Node `fetch()` — fetchproxy is NOT in the request hot path. Bridge errors are classified via `@chrischall/mcp-utils/fetchproxy` (`classifyBridgeError` / `FetchproxyBridgeDownError`) into actionable messages.
 
 CUPS linked-district token-minting still happens entirely in Node — it just needs the primary district's cookies (which fetchproxy provides on bootstrap). On a 401 or TTL expiry in fetchproxy mode, the client refuses to attempt `verify.jsp` (empty creds) and throws an actionable error telling the user to re-sign-in in the browser and restart the MCP.
 
@@ -128,10 +130,23 @@ The **PR title MUST be a Conventional Commit**, written user-facing (`fix(scope)
 
 **Don't run `gh pr merge` yourself.** The automation does it:
 
-1. `pr-auto-review.yml` runs a Claude review on every PR **except** the release-please release PR (which it deliberately skips). On a `pass` verdict it adds the `ready-to-merge` label.
+1. `pr-auto-review.yml` runs a Claude review on every PR **except** the release-please release PR (which it deliberately skips). A `pass` **or** `warn` verdict adds the `ready-to-merge` label; `warn`/`fail` also open or update an `auto-review-followup` issue capturing the findings. Only a `fail` verdict blocks the merge.
 2. `auto-merge.yml`, on the `ready-to-merge` label (or on a dependabot PR), arms `gh pr merge --auto --squash`. The moment CI is green the PR squash-merges itself.
 
 For ordinary feature/fix PRs, opening with `gh pr create --label <label>` (or `--label ignore-for-release` for chores not worth a release-notes line) is the whole job. If Claude's verdict was `warn`/`fail` but you've decided to ship anyway, add the label yourself: `gh pr edit <num> --add-label ready-to-merge`.
+
+### Auto-review follow-up issues
+
+When a PR's auto-review verdict is `warn` or `fail`, the `chrischall/workflows` pipeline opens or updates a single `auto-review-followup` issue ("Auto-review follow-ups for PR #N") whose checklist captures every finding, and links it from the PR's `<!-- auto-review-verdict -->` comment (`📋 Tracking follow-ups: #N`). `warn` (nits only) still auto-merges — the issue carries the nits forward, so most nits are fixed in a *later* PR; `fail` blocks until the important findings are addressed on the PR itself.
+
+When asked to address the auto-review comments / review findings on a PR:
+
+1. Read the verdict comment, open the linked `auto-review-followup` issue, and treat its checklist as the work list (alongside any inline review comments).
+2. Resolve each item, checking off only what you've **verified** is genuinely fixed.
+3. If every item is resolved on the current PR, add `Closes #<issue>` to that PR's body so the merge closes it; if some are deferred, check off only the resolved ones and leave the issue open.
+4. For nits whose `warn` PR already auto-merged, address them in a follow-up PR that references `Closes #<issue>`.
+
+(Mirrors the fleet-wide convention in `~/.claude/CLAUDE.md`.)
 
 ### PR timing — only open when the feature is done
 
@@ -158,15 +173,16 @@ jq -r '.description | length' server.json
 
 ## Versioning
 
-Version appears in SEVEN places — all must match:
+The version string lives in several files, **all kept in sync by release-please** — don't edit them by hand:
 
-1. `package.json` → `"version"`
-2. `package-lock.json` → run `npm install --package-lock-only` after changing (or `npm version` does it)
-3. `src/index.ts` → `McpServer` constructor `version` field
-4. `manifest.json` → `"version"`
-5. `server.json` → top-level `"version"` and `packages[].version`
-6. `.claude-plugin/plugin.json` → `"version"`
-7. `.claude-plugin/marketplace.json` → `metadata.version` and `plugins[].version`
+1. `package.json` → `"version"` + `package-lock.json` (the `node` release-type updates both)
+2. `src/index.ts` → `version: '…'` on the `COMMON` const, marked `// x-release-please-version` (extra-file)
+3. `manifest.json` → `"version"` (extra-file)
+4. `server.json` → top-level `"version"` and `packages[*].version` (extra-files)
+5. `.claude-plugin/plugin.json` → `"version"` (extra-file)
+6. `.claude-plugin/marketplace.json` → `metadata.version` and `plugins[*].version` (extra-files)
+
+(See `release-please-config.json` → `extra-files`.) `tests/version-sync.test.ts` enforces that every `x-release-please-version` annotation in `src/` matches `package.json` — add that marker to any new version-bearing constant.
 
 ### Release flow
 
