@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.4...v2.3.5) (2026-06-21)
+
+
+### Documentation
+
+* audit CLAUDE.md and add auto-review follow-up convention ([#76](https://github.com/chrischall/infinitecampus-mcp/issues/76)) ([b0767f7](https://github.com/chrischall/infinitecampus-mcp/commit/b0767f79a6cf70c35fd596f9b89c571063a65c3b))
+* require Conventional Commit PR titles for release-please ([#72](https://github.com/chrischall/infinitecampus-mcp/issues/72)) ([aa23e76](https://github.com/chrischall/infinitecampus-mcp/commit/aa23e76e489af4d1988810e137cf0733095cf0cc))
+
 ## [2.3.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.3...v2.3.4) (2026-06-13)
 
 
