@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, toArray } from './_shared.js';
+import { is404, toArray } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -78,6 +79,6 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
     const teachers = toArray(teachersRaw).map((t) => trimRecord(t));
     const counselors = toArray(counselorsRaw).map((c) => trimRecord(c));
 
-    return textContent({ counselors, teachers });
+    return textResult({ counselors, teachers });
   });
 }

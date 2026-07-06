@@ -38,6 +38,10 @@ describe('AuthFailedError', () => {
     expect(e.message).not.toContain('Check IC_USERNAME');
     expect(e.message).toContain('Sign in again at the IC portal');
   });
+  it('defaults permanent to false and sets it when requested', () => {
+    expect(new AuthFailedError('d').permanent).toBe(false);
+    expect(new AuthFailedError('d', 'no creds', { permanent: true }).permanent).toBe(true);
+  });
 });
 
 describe('ICClient.listDistricts', () => {
@@ -321,6 +325,40 @@ describe('ICClient.request — retry + concurrency', () => {
     expect(loginCount).toBe(1);
   });
 
+  it('coalesces a burst of TTL-expired requests into ONE re-login', async () => {
+    // ensureFresh invalidates a stale session before the manager's ensure();
+    // the invalidate only fires while a session is present, so the second and
+    // third concurrent callers see `current === undefined` and join the
+    // in-flight login instead of clobbering it and starting their own.
+    let loginCount = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/campus/verify.jsp')) {
+        loginCount++;
+        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } });
+      }
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(primaryAccount);
+    await client.request('anoka', '/x');
+    expect(loginCount).toBe(1);
+
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 6 * 60 * 60 * 1000);
+    await Promise.all([
+      client.request('anoka', '/a'),
+      client.request('anoka', '/b'),
+      client.request('anoka', '/c'),
+    ]);
+    expect(loginCount).toBe(2); // exactly one re-login for the whole burst
+  });
+
 });
 
 describe('ICClient.request — error paths', () => {
@@ -548,15 +586,20 @@ describe('ICClient.request — error paths', () => {
   });
 
   it('parseSetCookies filters Max-Age=0, malformed, empty-value cookies and extracts XSRF-TOKEN', async () => {
-    // Covers lines 164, 168, 174, 177 in parseSetCookies.
     // Use the fallback path (getSetCookie = undefined) with a comma-separated
-    // set-cookie header containing all the edge cases.
+    // set-cookie header containing all the edge cases. mcp-utils'
+    // parseCookieJar splits the joined string on commas that start a new
+    // `name=` pair — safe around the comma inside an Expires date (which the
+    // old naive comma-split broke on). A nameless `=noname` fragment can't
+    // start a new pair, so it glues onto the previous entry and is discarded
+    // with it (attributes after the first `;` are ignored).
     const cookieHeader = [
-      'deleted=old; Path=/; Max-Age=0',   // Max-Age=0 → filtered (line 164)
-      '=noname; Path=/',                   // eqIdx=0 → malformed (line 168)
-      'emptyval=; Path=/',                 // empty value → filtered (line 174)
+      'expired=gone; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT', // epoch Expires (comma inside) → filtered
+      'deleted=old; Path=/; Max-Age=0',   // Max-Age=0 deletion marker → filtered
+      'emptyval=; Path=/',                 // empty value → filtered
+      '=noname; Path=/',                   // malformed: no name → glued to emptyval entry, discarded
       'JSESSIONID=sess123; Path=/',        // normal cookie kept
-      'XSRF-TOKEN=xsrf-abc; Path=/',      // XSRF extraction (line 177)
+      'XSRF-TOKEN=xsrf-abc; Path=/',      // XSRF extraction
     ].join(', ');
 
     const loginRes = new Response('', {
@@ -587,6 +630,8 @@ describe('ICClient.request — error paths', () => {
     expect(dataHeaders['Cookie']).toContain('XSRF-TOKEN=xsrf-abc');
     expect(dataHeaders['Cookie']).not.toContain('deleted');
     expect(dataHeaders['Cookie']).not.toContain('emptyval');
+    expect(dataHeaders['Cookie']).not.toContain('expired');
+    expect(dataHeaders['Cookie']).not.toContain('noname');
   });
 
   it('parseSetCookies falls back to get("set-cookie") when getSetCookie is unavailable', async () => {
@@ -1539,6 +1584,32 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
     // No verify.jsp call should have been attempted on the expired session.
     const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
     expect(verifyCalls).toHaveLength(0);
+  });
+
+  it('caches the permanent no-creds error — repeat requests rethrow without network traffic', async () => {
+    // The no-creds AuthFailedError is a permanent config error: this process
+    // can never log back in (the user must re-sign-in in the browser and
+    // restart). CookieSessionManager caches it, so repeated tool calls fail
+    // fast with the same actionable message instead of re-running login.
+    fetchSpy
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    const client = new ICClient(fpAccount, { preloaded });
+    await client.request('anoka', '/x');
+
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
+
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal/);
+    const callsAfterFirstFailure = fetchSpy.mock.calls.length;
+
+    // Second failing request: cached error rethrown, zero new fetches.
+    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal/);
+    expect(fetchSpy.mock.calls.length).toBe(callsAfterFirstFailure);
   });
 
   it('refuses to retry on 401 with empty creds — bubbles AuthFailedError', async () => {

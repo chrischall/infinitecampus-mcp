@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, toArray, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
+import { is404, featureDisabled, toArray, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
 
 interface RawDocument {
   name?: string;
@@ -60,7 +61,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
         if (d.endYear !== undefined) out.endYear = d.endYear;
         return out;
       });
-      return textContent(trimmed);
+      return textResult(trimmed);
     } catch (e) {
       if (is404(e)) return featureDisabled('documents', args.district);
       throw e;
@@ -77,10 +78,10 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
       const meta = await client.download(args.district, args.documentId, args.destinationPath, {
         overwrite: args.overwrite ?? false,
       });
-      return textContent(meta);
+      return textResult(meta);
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('IC download 404')) {
-        return textContent({ warning: 'FeatureDisabled', feature: 'documents', district: args.district });
+        return textResult({ warning: 'FeatureDisabled', feature: 'documents', district: args.district });
       }
       throw e;
     }

@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
+import { is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -33,7 +34,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
     if (args.until) params.set('endDate', args.until);
     try {
       const data = await client.request(args.district, `/campus/resources/portal/foodService?${params}`);
-      return textContent(data);
+      return textResult(data);
     } catch (e) {
       if (is404(e)) return featureDisabled('foodService', args.district, EMPTY_FOOD);
       throw e;

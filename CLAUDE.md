@@ -28,11 +28,13 @@ src/
   config.ts            # loadAccount() — IC_* env loader over mcp-utils readEnvVar.
                        #   IC_BASE_URL+IC_DISTRICT required;
                        #   IC_USERNAME+IC_PASSWORD optional (both or neither — partial = error)
-  client.ts            # ICClient — per-district session pool, lazy login, 401 retry,
-                       #   CUPS linked-district discovery, download(). Accepts preloaded cookies
+  client.ts            # ICClient — one CookieSessionManager (mcp-utils/session) per district,
+                       #   lazy single-flight login, 401 replay via withSession, CUPS
+                       #   linked-district discovery, download(). Accepts preloaded cookies
   tools/
-    _shared.ts         # textContent, findStudent, featureDisabled, checkFeatureDisabled,
-                       #   is404, toArray — shared MCP shape + 404/feature-flag helpers
+    _shared.ts         # findStudent, featureDisabled, checkFeatureDisabled, is404,
+                       #   toArray — shared 404/feature-flag helpers (tools return
+                       #   results via mcp-utils' textResult directly)
     districts.ts       # ic_list_districts
     students.ts        # ic_list_students
     schedule.ts        # ic_get_schedule
@@ -196,8 +198,8 @@ Do NOT manually bump versions or create tags unless the user explicitly asks. re
 
 - **ESM + NodeNext**: imports must use `.js` extensions even for `.ts` source files (e.g. `import { loadAccount } from './config.js'`).
 - **stdio transport**: the server logs to **stderr only** — stdout is reserved for JSON-RPC. `dotenv` is loaded with `quiet: true` for the same reason; any extra stdout output corrupts the stream.
-- **Per-district session pool**: `ICClient` keeps one `Session` per district (cookie + XSRF token). `ensureSession` deduplicates concurrent logins via `loginInFlight`. Mutate sessions in place — concurrent callers hold live references.
-- **Session TTL**: 5h (`SESSION_TTL_MS`), slightly under IC's ~6h. `doRequest` does a single 401-retry: on 401 for a linked district, ALL sessions are invalidated and the primary is re-logged-in so CUPS rediscovers.
+- **Per-district session managers**: `ICClient` keeps one `CookieSessionManager` (from `@chrischall/mcp-utils/session`) per district (cookie header + XSRF token). The manager single-flights concurrent logins, replays a 401'd request exactly once via `withSession`, and caches the permanent fetchproxy no-creds error (`AuthFailedError.permanent`). Linked-district sessions are minted by CUPS discovery into the `discovered` side-channel and picked up by the linked manager's login.
+- **Session TTL**: 5h (`SESSION_TTL_MS`), slightly under IC's ~6h. The manager has no proactive TTL knob (upstream follow-up), so `ensureFresh` invalidates sessions older than the TTL before `ensure()`. On 401 for a linked district, `detectExpiredSession` invalidates the primary + all sibling linked sessions so the re-login rediscovers via CUPS.
 - **Login auth state**: `verify.jsp` returns 200 with `<AUTHENTICATION>state</AUTHENTICATION>` — `password-error`, `account-locked`, etc. The body is parsed and surfaced as an `AuthFailedError` with the reason, not a generic failure.
 - **Cookie jar**: IC's login response sends ~20 Set-Cookie headers including deletion markers (`Max-Age=0`). `parseSetCookies` filters those out and dedupes by name — sending both delete and set forms (e.g. `appName=`) makes IC reject the request with "conflicting app name values".
 - **FeatureDisabled**: many districts disable modules (behavior, food service, assessments). Tools probe `checkFeatureDisabled` against the per-structure `displayOptions` allow-list first, then fall through with an `is404` backstop — both paths return `{warning: 'FeatureDisabled', feature, district, data: []}` instead of throwing.
