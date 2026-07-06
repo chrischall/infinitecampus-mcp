@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, findStudent, studentNotFound, toArray } from './_shared.js';
+import { findStudent, studentNotFound, toArray } from './_shared.js';
 
 interface RawTerm {
   termID: number;
@@ -109,6 +110,6 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
       });
     }
 
-    return textContent(result);
+    return textResult(result);
   });
 }

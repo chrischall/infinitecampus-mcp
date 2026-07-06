@@ -1,8 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import { extractPlainTextFromHtml } from '@chrischall/mcp-utils/html';
 import type { ICClient } from '../client.js';
-import { textContent, toArray } from './_shared.js';
+import { toArray } from './_shared.js';
 
 const listArgs = z.object({
   district: z.string(),
@@ -162,7 +163,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
 
     const [notifications, inbox, announcements] = await Promise.all([prismPromise, inboxPromise, noticePromise]);
 
-    return textContent({ notifications, inbox, announcements });
+    return textResult({ notifications, inbox, announcements });
   });
 
   server.registerTool('ic_get_message', {
@@ -174,6 +175,6 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     const path = normalizeMessageUrl(args.messageUrl);
     const html = await client.request<string>(args.district, path, { responseType: 'text' });
     const parsed = parseMessageHtml(html ?? '', path);
-    return textContent(parsed);
+    return textResult(parsed);
   });
 }

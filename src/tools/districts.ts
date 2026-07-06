@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
-import { textContent } from './_shared.js';
 
 export function registerDistrictTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_districts', {
@@ -9,6 +9,6 @@ export function registerDistrictTools(server: McpServer, client: ICClient): void
   }, async () => {
     await client.ensureDiscovery();
     const data = client.listDistricts();
-    return textContent(data);
+    return textResult(data);
   });
 }

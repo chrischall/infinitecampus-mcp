@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ICClient } from '../../src/client.js';
 import {
-  textContent,
   is404,
   featureDisabled,
   findStudent,
@@ -20,28 +19,6 @@ const account = {
 };
 
 afterEach(() => vi.restoreAllMocks());
-
-describe('_shared.textContent', () => {
-  it('wraps an object as a pretty-printed JSON text block', () => {
-    const result = textContent({ foo: 'bar', n: 1 });
-    expect(result).toEqual({
-      content: [{ type: 'text', text: JSON.stringify({ foo: 'bar', n: 1 }, null, 2) }],
-    });
-  });
-
-  it('wraps an array as pretty-printed JSON', () => {
-    const result = textContent([1, 2, 3]);
-    expect(result.content[0].text).toBe('[\n  1,\n  2,\n  3\n]');
-  });
-
-  it('wraps null', () => {
-    expect(textContent(null).content[0].text).toBe('null');
-  });
-
-  it('wraps a primitive string', () => {
-    expect(textContent('hi').content[0].text).toBe('"hi"');
-  });
-});
 
 describe('_shared.is404', () => {
   it('returns true for IC 404 Error instances', () => {

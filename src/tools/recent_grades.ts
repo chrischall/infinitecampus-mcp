@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent } from './_shared.js';
 
 interface RawRecentGrade {
   assignmentName?: string;
@@ -80,6 +80,6 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
       }
       return out;
     });
-    return textContent(trimmed);
+    return textResult(trimmed);
   });
 }

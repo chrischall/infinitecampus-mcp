@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled } from './_shared.js';
+import { is404, featureDisabled } from './_shared.js';
 
 type FeeAssignment = Record<string, unknown>;
 
@@ -61,6 +62,6 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
       ...(issues.length > 0 ? { issues } : {}),
     };
 
-    return textContent(response);
+    return textResult(response);
   });
 }

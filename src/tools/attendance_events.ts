@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
+import { is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -156,7 +157,7 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
           results.push(trimmed);
         }
       }
-      return textContent(results);
+      return textResult(results);
     } catch (e) {
       if (is404(e)) return featureDisabled('attendance_events', args.district);
       throw e;

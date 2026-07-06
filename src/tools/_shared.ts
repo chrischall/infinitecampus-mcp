@@ -19,16 +19,6 @@ export interface RawStudent {
   enrollments?: RawEnrollment[];
 }
 
-/**
- * Wrap a value as an MCP text content block — the standard tool return shape.
- * Thin re-export of mcp-utils' `textResult` so the whole fleet shares one
- * pretty-printed-JSON formatter; the local name is kept to avoid churning
- * every tool call site.
- */
-export function textContent(data: unknown): CallToolResult {
-  return textResult(data);
-}
-
 /** Detect "IC 404 ..." errors thrown by ICClient.request for endpoints that don't exist. */
 export function is404(e: unknown): boolean {
   return e instanceof Error && e.message.startsWith('IC 404 ');
@@ -36,7 +26,7 @@ export function is404(e: unknown): boolean {
 
 /** Build a FeatureDisabled warning content block. */
 export function featureDisabled(feature: string, district: string, data: unknown = []) {
-  return textContent({ warning: 'FeatureDisabled', feature, district, data });
+  return textResult({ warning: 'FeatureDisabled', feature, district, data });
 }
 
 /** Fetch the students list and find the one matching studentId. Returns null if not found. */
@@ -51,7 +41,7 @@ export async function findStudent(
 
 /** Standard error content block for when studentId doesn't match any student. */
 export function studentNotFound(studentId: string) {
-  return textContent({ error: 'StudentNotFound', studentId });
+  return textResult({ error: 'StudentNotFound', studentId });
 }
 
 /**

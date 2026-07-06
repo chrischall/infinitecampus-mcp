@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { textResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
-import { textContent, findStudent, studentNotFound, featureDisabled, is404, toArray, checkFeatureDisabled } from './_shared.js';
+import { findStudent, studentNotFound, featureDisabled, is404, toArray, checkFeatureDisabled } from './_shared.js';
 
 // Test item shapes vary by district and test type — we pass them through unchanged.
 type AnyTest = Record<string, unknown>;
@@ -79,6 +80,6 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
       return featureDisabled('assessments', args.district);
     }
 
-    return textContent(result);
+    return textResult(result);
   });
 }
