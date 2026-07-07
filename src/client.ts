@@ -8,7 +8,6 @@ import type { Account } from './config.js';
 interface ICSession {
   cookieHeader: string;    // serialized "name=value; name2=value2" header
   xsrfToken: string;       // XSRF-TOKEN value for X-XSRF-TOKEN request header
-  loggedInAt: number;      // epoch ms mint time; drives the SESSION_TTL_MS refresh
 }
 
 export interface DisplayOptions { [key: string]: boolean; }
@@ -36,28 +35,12 @@ export class ICClient {
   /**
    * One CookieSessionManager per district (primary + each discovered linked
    * district). The manager owns the session lifecycle: single-flight login,
-   * `withSession` exactly-one 401 replay, `invalidate()`, and permanent-error
-   * caching. The manager has no proactive TTL knob, so `ensureFresh` wraps
-   * `ensure()` with the SESSION_TTL_MS check.
+   * `withSession` exactly-one 401 replay, `invalidate()`, permanent-error
+   * caching, proactive `maxAgeMs` (SESSION_TTL_MS) expiry, and — for linked
+   * districts — the CUPS-minted session installed via `seed()` during
+   * discovery.
    */
   private managers = new Map<string, CookieSessionManager<ICSession>>();
-  /**
-   * CUPS discovery side-channel: sessions minted for linked districts during
-   * `discoverLinkedDistricts`. A linked district's manager login *peeks* its
-   * entry (fresh-only) instead of POSTing placeholder creds to its own
-   * verify.jsp. Peek, not take: entries are overwritten by the next discovery
-   * run, and a concurrent login for the same district must resolve to the
-   * same session rather than fail on a consumed entry.
-   */
-  private discovered = new Map<string, ICSession>();
-  /**
-   * Last login failure per district, recorded by the manager's login wrapper.
-   * `withSession` deliberately swallows a *replay* re-login failure and
-   * returns the original 401 response; `doRequest` rethrows this instead of a
-   * generic SessionExpiredError so the caller keeps the actionable message
-   * (e.g. fetchproxy's "sign back into your IC portal in the browser").
-   */
-  private lastLoginError = new Map<string, unknown>();
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
   private primaryName: string;
   private featuresCache = new Map<string, { data: DisplayOptions; fetchedAt: number }>();
@@ -96,26 +79,30 @@ export class ICClient {
   }
 
   /**
-   * Build the per-district CookieSessionManager. The login wrapper records
-   * failures in `lastLoginError` (see that field's doc); a fetchproxy
-   * no-creds failure is the one *permanent* config error — the process can
-   * never recover without the user re-signing-in and restarting — so the
-   * manager caches and rethrows it instead of pointlessly retrying.
+   * Build the per-district CookieSessionManager.
+   *
+   * - `maxAgeMs: SESSION_TTL_MS` makes `ensure()` proactively invalidate and
+   *   re-login a session older than 5h (single-flight), replacing IC's old
+   *   hand-rolled `ensureFresh` wrapper. `now` reads `Date.now` at call time so
+   *   the clock stays mockable in tests.
+   * - `isPermanentError` caches the one config error the process can never
+   *   recover from (fetchproxy no-creds) so `ensure()` fails fast instead of
+   *   pointlessly retrying a login that can never succeed.
+   * - `onReplayLoginError` rethrows the re-login failure from `withSession`'s
+   *   expiry-replay path. By default that failure is swallowed and the stale
+   *   401 returned; rethrowing surfaces the actionable error (e.g. fetchproxy's
+   *   "sign back into your IC portal in the browser") to the caller instead of
+   *   a generic SessionExpiredError — the behavior IC's `lastLoginError`
+   *   bookkeeping used to provide.
    */
   private makeManager(account: Account): CookieSessionManager<ICSession> {
     return createCookieSessionManager<ICSession>({
-      login: async () => {
-        try {
-          const session = await this.login(account);
-          this.lastLoginError.delete(account.name);
-          return session;
-        } catch (e) {
-          this.lastLoginError.set(account.name, e);
-          throw e;
-        }
-      },
+      login: () => this.login(account),
       isExpired: (res) => this.detectExpiredSession(account.name, res),
       isPermanentError: (e) => e instanceof AuthFailedError && e.permanent,
+      maxAgeMs: SESSION_TTL_MS,
+      now: () => Date.now(),
+      onReplayLoginError: (err) => { throw err; },
     });
   }
 
@@ -140,25 +127,9 @@ export class ICClient {
     return true;
   }
 
-  /**
-   * TTL-aware `ensure()`. CookieSessionManager has no proactive-expiry knob
-   * (upstream follow-up: a `maxAgeMs` option akin to TokenManager's skew
-   * window), so this thin wrapper invalidates a session older than
-   * SESSION_TTL_MS before delegating to the manager's single-flight ensure.
-   * The invalidate only runs when a session is present, so concurrent stale
-   * callers still coalesce onto ONE re-login (the second caller sees
-   * `current === undefined` and joins the in-flight login).
-   */
-  private async ensureFresh(district: string): Promise<ICSession> {
-    const mgr = this.managers.get(district)!;
-    const current = mgr.current;
-    if (current && Date.now() - current.loggedInAt >= SESSION_TTL_MS) mgr.invalidate();
-    return mgr.ensure();
-  }
-
   async ensureDiscovery(): Promise<void> {
     // Ensure primary account is logged in, which triggers CUPS linked-district discovery
-    const session = await this.ensureFresh(this.primaryName);
+    const session = await this.managers.get(this.primaryName)!.ensure();
     // fetchproxy mode skips the verify.jsp login and therefore the discovery
     // call inside it. Run discovery directly the first time someone asks for
     // it. The primary is never in linkedTo (it's the root of the linkedTo
@@ -210,7 +181,7 @@ export class ICClient {
       account = this.accounts.get(district);
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
-    const session = await this.ensureFresh(account.name);
+    const session = await this.managers.get(account.name)!.ensure();
     // In fetchproxy mode, the preloaded-cookie login never runs verify.jsp
     // and therefore never calls discoverLinkedDistricts. Run discovery once
     // on the first primary call so linked districts are discoverable. (The
@@ -228,17 +199,20 @@ export class ICClient {
     // CUPS SSO switch, not by their own verify.jsp. Whether the linked session
     // expired by TTL or by 401 (detectExpiredSession dropped the primary in
     // that case), re-auth through the primary: refresh it, which re-runs
-    // discoverLinkedDistricts and re-mints this district's session into
-    // `discovered` — POSTing the placeholder creds to verify.jsp would instead
-    // yield a misleading password-error.
+    // discoverLinkedDistricts and `seed()`s a fresh session into this
+    // district's manager — POSTing the placeholder creds to verify.jsp would
+    // instead yield a misleading password-error.
+    //
+    // This runs as the linked manager's `login`, which `ensure()` only invokes
+    // after invalidating any stale session — so `current` is `undefined` on
+    // entry and becomes non-undefined ONLY if the primary refresh re-ran
+    // discovery and seeded us. If the primary was still fresh (or discovery
+    // failed to restore this district), `current` stays undefined — surface a
+    // clear error rather than handing callers a dead session.
     const primaryName = this.linkedTo.get(account.name);
     if (primaryName) {
-      await this.ensureFresh(primaryName);
-      // If the primary was refreshed, discovery just re-minted our session.
-      // If the primary was still fresh (or discovery failed to restore this
-      // district), the peek comes back stale/absent — surface a clear error
-      // rather than handing callers a dead session.
-      const restored = this.peekDiscovered(account.name);
+      await this.managers.get(primaryName)!.ensure();
+      const restored = this.managers.get(account.name)!.current;
       if (!restored) {
         throw new AuthFailedError(
           account.name,
@@ -255,7 +229,7 @@ export class ICClient {
     if (this.preloaded) {
       const { cookieHeader, xsrfToken } = this.preloaded;
       this.preloaded = null;
-      return { cookieHeader, xsrfToken, loggedInAt: Date.now() };
+      return { cookieHeader, xsrfToken };
     }
 
     // fetchproxy mode: empty primary creds, can't post to verify.jsp.
@@ -318,7 +292,6 @@ export class ICClient {
     const session: ICSession = {
       cookieHeader: cookies.cookieHeader,
       xsrfToken: cookies.xsrfToken,
-      loggedInAt: Date.now(),
     };
 
     // Discover linked districts (CUPS SSO) — non-blocking, errors logged not
@@ -327,20 +300,6 @@ export class ICClient {
     // `linkedTo` guard is needed.
     await this.discoverLinkedDistricts(account, session);
     return session;
-  }
-
-  /**
-   * The `discovered` entry for a linked district, but only while it is still
-   * inside the session TTL. Entries are only minted during primary-district
-   * discovery, so a stale entry implies the primary session from that same
-   * login is stale too — `login()`'s linked branch refreshes the primary
-   * first, re-running discovery, before peeking.
-   */
-  private peekDiscovered(district: string): ICSession | null {
-    // Non-null: linkedTo/discovered/managers entries for a linked district are
-    // always written together in discoverLinkedDistricts and never deleted.
-    const s = this.discovered.get(district)!;
-    return Date.now() - s.loggedInAt < SESSION_TTL_MS ? s : null;
   }
 
   private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<void> {
@@ -411,11 +370,12 @@ export class ICClient {
           const switchCookies = parseSetCookies(switchRes.headers);
           if (!switchCookies.cookieHeader) { console.error(`[ic] CUPS switch to ${linked.districtName}: no cookies`); continue; }
 
-          // Store synthetic account + freshly-minted session. The session
-          // goes into `discovered` (not straight into the manager) so the
-          // linked manager's own single-flight login picks it up via
-          // peekDiscovered — pushing into the manager from here would race
-          // a linked login that is mid-flight awaiting this very discovery.
+          // Store synthetic account + `seed()` the freshly-minted CUPS session
+          // into the linked district's own manager. `seed()` installs it with a
+          // fresh maxAgeMs clock and DETACHES any in-flight login — so when this
+          // discovery is itself being awaited by a mid-flight linked `login()`
+          // (the re-auth-through-primary path), that login's late resolution
+          // won't overwrite the seed. The manager must exist before we seed it.
           const syntheticAccount: Account = {
             name: linked.districtName,
             baseUrl: linkedBaseUrl,
@@ -425,14 +385,13 @@ export class ICClient {
           };
           this.accounts.set(linked.districtName, syntheticAccount);
           this.linkedTo.set(linked.districtName, account.name);
-          this.discovered.set(linked.districtName, {
-            cookieHeader: switchCookies.cookieHeader,
-            xsrfToken: switchCookies.xsrfToken,
-            loggedInAt: Date.now(),
-          });
           if (!this.managers.has(linked.districtName)) {
             this.managers.set(linked.districtName, this.makeManager(syntheticAccount));
           }
+          this.managers.get(linked.districtName)!.seed({
+            cookieHeader: switchCookies.cookieHeader,
+            xsrfToken: switchCookies.xsrfToken,
+          });
           console.error(`[ic] Linked district discovered: ${linked.districtName} (${linked.appName})`);
         } catch (e) {
           console.error(`[ic] CUPS flow failed for ${linked.districtName}: ${e instanceof Error ? e.message : e}`);
@@ -459,7 +418,7 @@ export class ICClient {
 
     const account = this.accounts.get(district);
     if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
-    const session = await this.ensureFresh(account.name);
+    const session = await this.managers.get(account.name)!.ensure();
 
     // Support both relative paths (/campus/...) and absolute URLs
     // (e.g. report-card URLs from ic_list_documents come fully-qualified).
@@ -483,7 +442,6 @@ export class ICClient {
 
   private async doRequest<T>(account: Account, path: string, opts: RequestOpts): Promise<T> {
     const mgr = this.managers.get(account.name)!;
-    this.lastLoginError.delete(account.name);
     const accept = opts.responseType === 'text' ? 'text/html, text/plain, */*' : 'application/json';
     // withSession: on a 401 (detectExpiredSession, which also drops the
     // primary + sibling sessions for a linked district), the manager
@@ -503,13 +461,12 @@ export class ICClient {
     );
 
     if (res.status === 401) {
-      // Two ways to land here: the replayed request 401'd again (fresh
-      // session rejected → SessionExpiredError), or the re-login itself
-      // failed and withSession returned the ORIGINAL 401, swallowing the
-      // login error — rethrow that error so the caller gets the actionable
-      // message (e.g. fetchproxy's "sign back into your IC portal").
-      const loginError = this.lastLoginError.get(account.name);
-      if (loginError !== undefined) throw loginError;
+      // We only reach here when the re-login SUCCEEDED but the replayed request
+      // 401'd again (a fresh session the portal still rejects). If the re-login
+      // itself failed, the `onReplayLoginError` hook already rethrew that
+      // error out of `withSession` — carrying the actionable message (e.g.
+      // fetchproxy's "sign back into your IC portal") — so control never
+      // reaches this branch in that case.
       throw new SessionExpiredError(account.name);
     }
     if (res.status >= 500) throw new PortalUnreachableError(account.name, res.status);
