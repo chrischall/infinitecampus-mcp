@@ -326,10 +326,10 @@ describe('ICClient.request — retry + concurrency', () => {
   });
 
   it('coalesces a burst of TTL-expired requests into ONE re-login', async () => {
-    // ensureFresh invalidates a stale session before the manager's ensure();
-    // the invalidate only fires while a session is present, so the second and
-    // third concurrent callers see `current === undefined` and join the
-    // in-flight login instead of clobbering it and starting their own.
+    // The manager's `maxAgeMs` (SESSION_TTL_MS) invalidates a stale session
+    // inside `ensure()`; the invalidate only fires while a session is present,
+    // so the second and third concurrent callers see `current === undefined`
+    // and join the in-flight login instead of clobbering it and starting their own.
     let loginCount = 0;
     fetchSpy.mockImplementation(async (url) => {
       const u = String(url);
