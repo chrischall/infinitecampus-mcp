@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.6](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.5...v2.3.6) (2026-07-07)
+
+
+### Bug Fixes
+
+* bump @chrischall/mcp-utils to 0.12.0 ([#91](https://github.com/chrischall/infinitecampus-mcp/issues/91)) ([38d40c7](https://github.com/chrischall/infinitecampus-mcp/commit/38d40c7b0cdc0c21dba45d68257b1c30f46d5e96))
+
+
+### Refactor
+
+* bump mcp-utils to 0.10.5; adopt CookieSessionManager per district ([#87](https://github.com/chrischall/infinitecampus-mcp/issues/87)) ([59e0239](https://github.com/chrischall/infinitecampus-mcp/commit/59e0239e3b3502d241a052ab89956eef54f3bb63))
+* use CookieSessionManager maxAgeMs/seed/onReplayLoginError (drop local workarounds) ([#90](https://github.com/chrischall/infinitecampus-mcp/issues/90)) ([c2b273e](https://github.com/chrischall/infinitecampus-mcp/commit/c2b273ef0b771bef17e234d72973d5af70e18add))
+
 ## [2.3.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.4...v2.3.5) (2026-07-05)
 
 
