@@ -98,8 +98,7 @@ Tests live under `tests/` mirroring `src/`. Run with `npm test`. No real API cal
 .mcp.json                        # Plugin-runtime MCP server config (uses ${CLAUDE_PLUGIN_ROOT})
 manifest.json                    # MCPB / DXT bundle manifest (user_config + tool catalog)
 server.json                      # modelcontextprotocol/registry entry
-SKILL.md                         # Claude Code skill — when/how to use the tools
-skills/ic/SKILL.md               # Packaged .skill file (zipped in Release workflow)
+skills/ic/SKILL.md               # Claude Code skill — when/how to use the tools (packaged .skill file, zipped in Release workflow)
 ```
 
 None of these are part of the MCP runtime — they exist for distribution (Claude Code plugin marketplace, MCPB, MCP Registry, ClawHub).
