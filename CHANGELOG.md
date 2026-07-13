@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.6...v2.4.0) (2026-07-13)
+
+
+### Features
+
+* **skill:** add infinitecampus curl access skill ([#96](https://github.com/chrischall/infinitecampus-mcp/issues/96)) ([0fd5637](https://github.com/chrischall/infinitecampus-mcp/commit/0fd5637cb02b80f70115ee579a6a108c19aec5ad))
+
+
+### Refactor
+
+* **skill:** move root SKILL.md into skills/, point plugin.json at ./skills/ ([#98](https://github.com/chrischall/infinitecampus-mcp/issues/98)) ([698c004](https://github.com/chrischall/infinitecampus-mcp/commit/698c00438207b429daa5618d6bb4e1ea79537dbf))
+
 ## [2.3.6](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.5...v2.3.6) (2026-07-07)
 
 
