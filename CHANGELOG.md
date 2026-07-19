@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.0...v2.4.1) (2026-07-19)
+
+
+### Documentation
+
+* replace duplicated fleet policy with a pointer ([#99](https://github.com/chrischall/infinitecampus-mcp/issues/99)) ([5ef35f3](https://github.com/chrischall/infinitecampus-mcp/commit/5ef35f33c7518286918d3ad1a56e523e0dab1d59))
+
 ## [2.4.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.3.6...v2.4.0) (2026-07-13)
 
 
