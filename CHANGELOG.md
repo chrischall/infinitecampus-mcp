@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.1...v2.4.2) (2026-07-30)
+
+
+### Bug Fixes
+
+* **deps:** bump @fetchproxy/* to 1.7.0 and @chrischall/mcp-utils to 0.14.0 ([#108](https://github.com/chrischall/infinitecampus-mcp/issues/108)) ([ae15f14](https://github.com/chrischall/infinitecampus-mcp/commit/ae15f14c55e02f80cdcc0a20ac7483f458c077b2))
+
 ## [2.4.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.0...v2.4.1) (2026-07-19)
 
 
