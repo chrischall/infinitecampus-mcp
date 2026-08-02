@@ -1471,7 +1471,7 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(fpAccount, { preloaded });
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
     const result = await client.request<{ ok: boolean }>('anoka', '/campus/api/test');
     expect(result).toEqual({ ok: true });
 
@@ -1517,7 +1517,7 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
       return new Response(JSON.stringify({ ok: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
-    const client = new ICClient(fpAccount, { preloaded });
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
     await client.request('anoka', '/campus/api/test');
     // Linked district should have been discovered after the primary call.
     expect(client.listDistricts()).toHaveLength(2);
@@ -1537,7 +1537,7 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
       });
     });
 
-    const client = new ICClient(fpAccount, { preloaded });
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
     await client.request('anoka', '/x');
     await client.request('anoka', '/y');
     await client.request('anoka', '/z');
@@ -1546,7 +1546,7 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
 
   it('ensureDiscovery() runs CUPS discovery in fetchproxy mode', async () => {
     fetchSpy.mockResolvedValueOnce(noLinkedAccounts());
-    const client = new ICClient(fpAccount, { preloaded });
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
     await client.ensureDiscovery();
     expect(client.listDistricts()).toHaveLength(1);
     const cupsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/cups/linkedAccounts'));
@@ -1555,7 +1555,7 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
 
   it('ensureDiscovery() in fetchproxy mode is idempotent', async () => {
     fetchSpy.mockResolvedValueOnce(noLinkedAccounts());
-    const client = new ICClient(fpAccount, { preloaded });
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
     await client.ensureDiscovery();
     await client.ensureDiscovery();
     const cupsCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/cups/linkedAccounts'));
@@ -1572,38 +1572,34 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    const client = new ICClient(fpAccount, { preloaded });
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ ok: 1 }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }));
+    const lift = vi.fn(async () => preloaded);
+    const client = new ICClient(fpAccount, { refreshSession: lift });
     await client.request('anoka', '/x');
+    expect(lift).toHaveBeenCalledTimes(1);
 
     // Force TTL expiry
     const sixHoursMs = 6 * 60 * 60 * 1000;
     const realNow = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
 
-    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal in the browser/);
-    // No verify.jsp call should have been attempted on the expired session.
+    // With a lift available this now RENEWS rather than dead-ending: the
+    // browser still holds a live session, so re-read it.
+    await client.request('anoka', '/x');
+    expect(lift).toHaveBeenCalledTimes(2);
+    // Still never posts empty creds to verify.jsp.
     const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
     expect(verifyCalls).toHaveLength(0);
   });
 
-  it('caches the permanent no-creds error — repeat requests rethrow without network traffic', async () => {
-    // The no-creds AuthFailedError is a permanent config error: this process
-    // can never log back in (the user must re-sign-in in the browser and
-    // restart). CookieSessionManager caches it, so repeated tool calls fail
-    // fast with the same actionable message instead of re-running login.
-    fetchSpy
-      .mockResolvedValueOnce(noLinkedAccounts())
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: 1 }), {
-        status: 200, headers: { 'content-type': 'application/json' },
-      }));
-
-    const client = new ICClient(fpAccount, { preloaded });
-    await client.request('anoka', '/x');
-
-    const sixHoursMs = 6 * 60 * 60 * 1000;
-    const realNow = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(realNow + sixHoursMs);
-
+  it('caches the permanent no-creds error when there is no lift either', async () => {
+    // With neither credentials NOR a browser lift, this process genuinely
+    // cannot log in. That error is permanent: CookieSessionManager caches it
+    // so repeat tool calls fail fast with the same actionable message rather
+    // than re-running a login that can never succeed.
+    const client = new ICClient(fpAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal/);
     const callsAfterFirstFailure = fetchSpy.mock.calls.length;
 
@@ -1612,16 +1608,128 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
     expect(fetchSpy.mock.calls.length).toBe(callsAfterFirstFailure);
   });
 
-  it('refuses to retry on 401 with empty creds — bubbles AuthFailedError', async () => {
-    fetchSpy
-      // CUPS linkedAccounts
-      .mockResolvedValueOnce(noLinkedAccounts())
-      // GET → 401
-      .mockResolvedValueOnce(new Response('', { status: 401 }));
-
-    const client = new ICClient(fpAccount, { preloaded });
-    await expect(client.request('anoka', '/x')).rejects.toThrow(/sign back into your IC portal/);
+  it('never posts empty creds to verify.jsp, even across a renewal', async () => {
+    // The original guarantee, preserved through the renewal change: a 401 in
+    // fetchproxy mode must never fall through to a verify.jsp POST with the
+    // synthesized empty credentials. It re-lifts instead, and if the browser
+    // session is genuinely dead the error surfaces.
+    fetchSpy.mockImplementation(async (url) =>
+      String(url).includes('/cups/linkedAccounts')
+        ? noLinkedAccounts()
+        : new Response('', { status: 401 }),
+    );
+    const client = new ICClient(fpAccount, { refreshSession: async () => preloaded });
+    await expect(client.request('anoka', '/x')).rejects.toThrow();
     const verifyCalls = fetchSpy.mock.calls.filter((c) => String(c[0]).includes('/campus/verify.jsp'));
     expect(verifyCalls).toHaveLength(0);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// fetchproxy session RENEWAL
+// ────────────────────────────────────────────────────────────────────────────
+//
+// The browser session used to be captured once, at process start, and handed
+// to the client as a value. JSESSIONID is a Java servlet session with a short
+// idle timeout, so the fetchproxy path died the first time it lapsed — the
+// account has empty creds, so verify.jsp was not an option, and the client
+// raised a `permanent` AuthFailedError telling the user to "restart the MCP".
+// Restarting was in fact the only cure, which is exactly the bug: the browser
+// still had a live session the whole time; nothing ever re-read it.
+describe('ICClient — fetchproxy session renewal', () => {
+  const fpAccount: Account = { ...primaryAccount, username: '', password: '' };
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('re-lifts the browser session when the primary session expires', async () => {
+    const refreshSession = vi
+      .fn<() => Promise<{ cookieHeader: string; xsrfToken: string }>>()
+      .mockResolvedValueOnce({ cookieHeader: 'JSESSIONID=stale', xsrfToken: 'x1' })
+      .mockResolvedValueOnce({ cookieHeader: 'JSESSIONID=fresh', xsrfToken: 'x2' });
+
+    // NB: count data calls explicitly — IC's CUPS endpoint also lives under
+    // /campus/api/, so filtering on that prefix silently counts discovery.
+    let dataCalls = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+      }
+      dataCalls++;
+      // First data call 401s (session lapsed), the replay succeeds.
+      if (dataCalls === 1) return new Response('', { status: 401 });
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(fpAccount, { refreshSession });
+    await client.request('anoka', '/campus/api/test');
+
+    // The lift ran twice: once for the initial login, once to renew.
+    expect(refreshSession).toHaveBeenCalledTimes(2);
+    const sent = fetchSpy.mock.calls.filter(
+      (c) => String(c[0]).includes('/campus/api/') && !String(c[0]).includes('/cups/'),
+    );
+    const retryHeaders = (sent.at(-1)![1] as RequestInit).headers as Record<string, string>;
+    expect(retryHeaders.Cookie).toBe('JSESSIONID=fresh');
+  });
+
+  it('surfaces a lift failure during renewal instead of a generic 401', async () => {
+    // The user signed out of the browser between the initial lift and the
+    // renewal. The replay login throws; `onReplayLoginError` rethrows it so
+    // the caller sees the actionable "sign into your IC portal" copy rather
+    // than a bare SessionExpiredError from the stale 401.
+    const refreshSession = vi
+      .fn<() => Promise<{ cookieHeader: string; xsrfToken: string }>>()
+      .mockResolvedValueOnce({ cookieHeader: 'JSESSIONID=ok', xsrfToken: 'x' })
+      .mockRejectedValueOnce(new Error('JSESSIONID cookie not found on anoka.infinitecampus.org.'));
+
+    let dataCalls = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      if (String(url).includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+      }
+      dataCalls++;
+      return new Response('', { status: 401 });
+    });
+
+    const client = new ICClient(fpAccount, { refreshSession });
+    await expect(client.request('anoka', '/campus/api/test')).rejects.toThrow(
+      /JSESSIONID cookie not found/,
+    );
+    expect(refreshSession).toHaveBeenCalledTimes(2);
+    expect(dataCalls).toBe(1);
+  });
+
+  it('does not tell the user to restart when a lift is available', async () => {
+    // A lift that keeps returning a dead session must still surface an error —
+    // but not the old "restart the MCP" copy, which is no longer true.
+    const refreshSession = vi
+      .fn<() => Promise<{ cookieHeader: string; xsrfToken: string }>>()
+      .mockResolvedValue({ cookieHeader: 'JSESSIONID=dead', xsrfToken: 'x' });
+    fetchSpy.mockImplementation(async (url) =>
+      String(url).includes('/cups/linkedAccounts')
+        ? new Response(JSON.stringify({ accounts: [] }), { status: 200 })
+        : new Response('', { status: 401 }),
+    );
+    const client = new ICClient(fpAccount, { refreshSession });
+    const err = await client.request('anoka', '/campus/api/test').then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(err).not.toBeNull();
+    expect(err!.message).not.toMatch(/restart the MCP/i);
+  });
+
+  it('still refuses cleanly when there is neither a lift nor credentials', async () => {
+    fetchSpy.mockImplementation(async (url) =>
+      String(url).includes('/cups/linkedAccounts')
+        ? new Response(JSON.stringify({ accounts: [] }), { status: 200 })
+        : new Response('', { status: 401 }),
+    );
+    const client = new ICClient(fpAccount);
+    await expect(client.request('anoka', '/campus/api/test')).rejects.toThrow();
   });
 });

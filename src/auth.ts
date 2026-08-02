@@ -53,25 +53,36 @@ import { parseBoolEnv } from '@chrischall/mcp-utils';
 import { loadAccount, type Account } from './config.js';
 import pkg from '../package.json' with { type: 'json' };
 
+/** Session cookies lifted out of the signed-in IC portal tab. */
+export interface ICBrowserSession {
+  cookieHeader: string;
+  xsrfToken: string;
+}
+
 /** Result of resolving auth, regardless of which path was taken. */
 export interface ResolvedAuth {
   /**
    * Account config the client should treat as authoritative. For the env
    * path this is the full Account with creds. For the fetchproxy path the
    * `username` + `password` fields are empty strings and the client uses
-   * `preloaded` instead of POSTing to `verify.jsp`.
+   * `refresh` instead of POSTing to `verify.jsp`.
    */
   account: Account;
   /**
-   * For the fetchproxy path: pre-loaded session cookies pulled from the
-   * browser. The client uses these in place of running its login flow.
-   * For the env path this is undefined and the client follows its normal
-   * lazy-login flow.
+   * For the fetchproxy path: lifts a fresh set of session cookies out of the
+   * user's signed-in IC portal tab. The client calls this INSTEAD of its
+   * verify.jsp login — lazily on the first request, and again on every
+   * expiry.
+   *
+   * A function, not a captured value, on purpose. JSESSIONID is a Java
+   * servlet session with a short idle timeout, and a fetchproxy account has
+   * no credentials to re-login with, so a value captured once at process
+   * start left the server permanently dead the moment it lapsed. Re-reading
+   * the browser is the only renewal path.
+   *
+   * Undefined for the env path, where the client posts to verify.jsp.
    */
-  preloaded?: {
-    cookieHeader: string;
-    xsrfToken: string;
-  };
+  refresh?: () => Promise<ICBrowserSession>;
   /** Which path produced this. Diagnostics only — callers should not branch. */
   source: 'env' | 'fetchproxy';
 }
@@ -99,71 +110,24 @@ export async function resolveAuth(): Promise<ResolvedAuth> {
   }
 
   // ── Path 2: fetchproxy fallback.
+  //
+  // NOTE: the browser is NOT read here. `resolveAuth()` runs once at process
+  // start; the lift is handed to the client as `refresh` and runs lazily on
+  // the first request and again on every expiry. Two bugs this avoids:
+  //
+  //   * The lapsed-session dead end. JSESSIONID is a servlet session with a
+  //     short idle timeout. A cookie captured at boot left the server
+  //     unauthenticated the moment it lapsed, with no way back — the account
+  //     has empty creds, so verify.jsp is not an option.
+  //   * The sticky startup failure. A lift that failed at boot (user not yet
+  //     signed in) was cached for the life of the process, so signing in
+  //     afterwards changed nothing.
   if (!fetchproxyDisabled()) {
-    try {
-      const host = new URL(account.baseUrl).hostname;
-      const session = await bootstrap({
-        serverName: pkg.name,
-        version: pkg.version,
-        // IC tenants live on per-district hosts (campus.<district>.org,
-        // <district>.infinitecampus.org, etc.). Declare just this host
-        // — each district is its own root, no wildcard needed.
-        domains: [host],
-        declare: {
-          // JSESSIONID is HttpOnly (chrome.cookies.get sees it; the
-          // security gate is the declared key list). XSRF-TOKEN is
-          // non-HttpOnly because the page JS reads it back and echoes
-          // it on every state-changing call as the X-XSRF-TOKEN header.
-          cookies: ['JSESSIONID', 'XSRF-TOKEN'],
-          localStorage: [],
-          sessionStorage: [],
-          captureHeaders: [],
-        },
-      });
-
-      const jsessionid = session.cookies['JSESSIONID'];
-      const xsrf = session.cookies['XSRF-TOKEN'];
-      if (!jsessionid) {
-        throw new Error(
-          `JSESSIONID cookie not found on ${host}. ` +
-            'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
-        );
-      }
-      if (!xsrf) {
-        throw new Error(
-          `XSRF-TOKEN cookie not found on ${host}. ` +
-            'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
-        );
-      }
-
-      return {
-        account,
-        preloaded: {
-          cookieHeader: `JSESSIONID=${jsessionid}; XSRF-TOKEN=${xsrf}`,
-          xsrfToken: xsrf,
-        },
-        source: 'fetchproxy',
-      };
-    } catch (e) {
-      // 0.8.0+ typed-error discrimination. The fetchproxy server already
-      // retries once on SW eviction (bridgeReviveDelayMs=2000 default), so
-      // a thrown FetchproxyBridgeDownError means the retry also failed —
-      // the extension's service worker is genuinely down and the user
-      // needs to wake it. The `.hint` is the actionable copy
-      // ("click the extension toolbar icon...") that we'd otherwise have
-      // to hand-write here. Surface it verbatim so users in path 2 get
-      // the same self-service guidance as path 3.
-      if (classifyBridgeError(e) === 'bridge_down') {
-        const downErr = e as FetchproxyBridgeDownError;
-        throw new Error(
-          `IC auth: fetchproxy bridge is down (extension service worker unreachable after retry). ${downErr.hint}`,
-        );
-      }
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(
-        'IC auth: no IC_USERNAME/IC_PASSWORD set, and fetchproxy fallback failed: ' + msg,
-      );
-    }
+    return {
+      account,
+      refresh: () => liftBrowserSession(account),
+      source: 'fetchproxy',
+    };
   }
 
   // ── Path 3: nothing configured and fetchproxy explicitly disabled.
@@ -172,4 +136,74 @@ export async function resolveAuth(): Promise<ResolvedAuth> {
       'or install the fetchproxy extension and sign into your IC portal ' +
       '(unset IC_DISABLE_FETCHPROXY if it is set).',
   );
+}
+
+/**
+ * Lift a fresh IC session out of the user's signed-in portal tab.
+ *
+ * Runs on every login/renewal, not once at startup. `@fetchproxy/bootstrap`
+ * opens a one-shot WebSocket bridge, asks the extension for the declared
+ * cookies, and closes it again — fetchproxy is not in the request hot path,
+ * only in the renewal path.
+ */
+async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
+  try {
+    const host = new URL(account.baseUrl).hostname;
+    const session = await bootstrap({
+      serverName: pkg.name,
+      version: pkg.version,
+      // IC tenants live on per-district hosts (campus.<district>.org,
+      // <district>.infinitecampus.org, etc.). Declare just this host
+      // — each district is its own root, no wildcard needed.
+      domains: [host],
+      declare: {
+        // JSESSIONID is HttpOnly (chrome.cookies.get sees it; the
+        // security gate is the declared key list). XSRF-TOKEN is
+        // non-HttpOnly because the page JS reads it back and echoes
+        // it on every state-changing call as the X-XSRF-TOKEN header.
+        cookies: ['JSESSIONID', 'XSRF-TOKEN'],
+        localStorage: [],
+        sessionStorage: [],
+        captureHeaders: [],
+      },
+    });
+
+    const jsessionid = session.cookies['JSESSIONID'];
+    const xsrf = session.cookies['XSRF-TOKEN'];
+    if (!jsessionid) {
+      throw new Error(
+        `JSESSIONID cookie not found on ${host}. ` +
+          'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
+      );
+    }
+    if (!xsrf) {
+      throw new Error(
+        `XSRF-TOKEN cookie not found on ${host}. ` +
+          'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
+      );
+    }
+
+    return {
+      cookieHeader: `JSESSIONID=${jsessionid}; XSRF-TOKEN=${xsrf}`,
+      xsrfToken: xsrf,
+    };
+  } catch (e) {
+    // 0.8.0+ typed-error discrimination. The fetchproxy server already
+    // retries once on SW eviction (bridgeReviveDelayMs=2000 default), so
+    // a thrown FetchproxyBridgeDownError means the retry also failed —
+    // the extension's service worker is genuinely down and the user
+    // needs to wake it. The `.hint` is the actionable copy
+    // ("click the extension toolbar icon...") that we'd otherwise have
+    // to hand-write here.
+    if (classifyBridgeError(e) === 'bridge_down') {
+      const downErr = e as FetchproxyBridgeDownError;
+      throw new Error(
+        `IC auth: fetchproxy bridge is down (extension service worker unreachable after retry). ${downErr.hint}`,
+      );
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      'IC auth: no IC_USERNAME/IC_PASSWORD set, and fetchproxy lift failed: ' + msg,
+    );
+  }
 }

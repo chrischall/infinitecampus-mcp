@@ -53,27 +53,33 @@ export class ICClient {
    */
   private fetchproxyMode = false;
   private fetchproxyDiscoveryRan = false;
-  /** fetchproxy cookies, consumed by the primary manager's first login. */
-  private preloaded: { cookieHeader: string; xsrfToken: string } | null = null;
+  /**
+   * fetchproxy lift. Called by the primary manager's login — on the first
+   * request AND on every renewal, which is what keeps the path alive past
+   * JSESSIONID's idle timeout.
+   */
+  private refreshSession: (() => Promise<ICSession>) | null = null;
 
   /**
-   * `preloaded` is the fetchproxy escape hatch: when set, the client treats
-   * the supplied cookies as a freshly-completed login on the primary account.
-   * This skips the `verify.jsp` POST entirely (the account has empty creds
-   * in this mode) but otherwise behaves identically — CUPS linked-district
-   * discovery still runs on first request, 401 retry still triggers a
-   * re-login. On a 401 with empty credentials we can't re-login from Node;
-   * the user must re-sign-in in the browser.
+   * `refreshSession` is the fetchproxy escape hatch: when set, it REPLACES
+   * the `verify.jsp` POST as the way this client mints a primary session.
+   * It is called lazily on the first request and again on every expiry, so a
+   * lapsed servlet session recovers by re-reading the browser rather than
+   * dead-ending. CUPS linked-district discovery still runs on first request.
+   *
+   * It must re-read the browser each time rather than return a captured
+   * value: JSESSIONID lapses on a short idle timer and the account has no
+   * credentials to fall back on.
    */
   constructor(
     account: Account,
-    opts: { preloaded?: { cookieHeader: string; xsrfToken: string } } = {},
+    opts: { refreshSession?: () => Promise<ICSession> } = {},
   ) {
     this.accounts.set(account.name, account);
     this.primaryName = account.name;
     this.managers.set(account.name, this.makeManager(account));
-    if (opts.preloaded) {
-      this.preloaded = opts.preloaded;
+    if (opts.refreshSession) {
+      this.refreshSession = opts.refreshSession;
       this.fetchproxyMode = true;
     }
   }
@@ -223,13 +229,12 @@ export class ICClient {
       return restored;
     }
 
-    // fetchproxy mode: the first primary login consumes the preloaded browser
-    // cookies instead of POSTing to verify.jsp. Consumed exactly once — after
-    // an expiry/invalidate there is nothing left to re-login with (below).
-    if (this.preloaded) {
-      const { cookieHeader, xsrfToken } = this.preloaded;
-      this.preloaded = null;
-      return { cookieHeader, xsrfToken };
+    // fetchproxy mode: mint the primary session by re-reading the browser
+    // instead of POSTing to verify.jsp. This runs on EVERY login, not just
+    // the first — a lapsed JSESSIONID recovers by lifting the live session
+    // the browser still holds, which is the whole point.
+    if (this.refreshSession) {
+      return this.refreshSession();
     }
 
     // fetchproxy mode: empty primary creds, can't post to verify.jsp.
@@ -240,7 +245,7 @@ export class ICClient {
       throw new AuthFailedError(
         account.name,
         'session expired and no IC_USERNAME/IC_PASSWORD set — ' +
-          'sign back into your IC portal in the browser and restart the MCP',
+          'sign back into your IC portal in the browser, or set IC_USERNAME/IC_PASSWORD',
         { permanent: true },
       );
     }
