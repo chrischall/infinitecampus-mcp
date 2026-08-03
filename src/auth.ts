@@ -139,14 +139,6 @@ export async function resolveAuth(): Promise<ResolvedAuth> {
 }
 
 /**
- * Lift a fresh IC session out of the user's signed-in portal tab.
- *
- * Runs on every login/renewal, not once at startup. `@fetchproxy/bootstrap`
- * opens a one-shot WebSocket bridge, asks the extension for the declared
- * cookies, and closes it again — fetchproxy is not in the request hot path,
- * only in the renewal path.
- */
-/**
  * One lifter per host, built lazily and reused.
  *
  * Unlike most MCPs the declared scope is not static — IC tenants live on

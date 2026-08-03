@@ -19,8 +19,14 @@ const bootstrapMock = vi.fn();
 // Forwarding the construction opts into the call keeps every existing
 // assertion on `bootstrapMock.mock.calls[0][0]` meaningful — it still inspects
 // the declared scope, just captured at construction rather than per call.
+//
+// CONSTRUCTION is spied separately from invocation. Without that split the
+// mock cannot tell a cached lifter from a freshly-built one, so the per-host
+// cache — which is what preserves the library's single-flighting — would have
+// no test holding it in place.
+const lifterFactoryMock = vi.fn((opts: unknown) => () => bootstrapMock(opts));
 vi.mock('@fetchproxy/bootstrap', () => ({
-  createSessionLifter: (opts: unknown) => () => bootstrapMock(opts),
+  createSessionLifter: (opts: unknown) => lifterFactoryMock(opts),
 }));
 
 import { resolveAuth } from '../src/auth.js';
@@ -130,6 +136,31 @@ describe('resolveAuth', () => {
       });
       expect(lifted.cookieHeader).toBe('JSESSIONID=sess-from-fp; XSRF-TOKEN=xsrf-from-fp');
       expect(lifted.xsrfToken).toBe('xsrf-from-fp');
+    });
+
+    // The per-host cache is what preserves createSessionLifter's
+    // single-flighting: the library dedupes concurrent calls PER LIFTER, so
+    // constructing a fresh one per refresh would compile fine and silently
+    // give the behavior back. Assert on construction count, not just reads.
+    it('builds one lifter per host and reuses it across renewals', async () => {
+      process.env.IC_BASE_URL = 'https://anoka.infinitecampus.org';
+      process.env.IC_DISTRICT = 'anoka';
+      bootstrapMock.mockResolvedValue({
+        cookies: { JSESSIONID: 's', 'XSRF-TOKEN': 'x' },
+        localStorage: {},
+        sessionStorage: {},
+        capturedHeaders: {},
+      });
+
+      const { refresh } = await resolveAuth();
+      await refresh!();
+      await refresh!();
+      await refresh!();
+
+      // Three browser reads...
+      expect(bootstrapMock).toHaveBeenCalledTimes(3);
+      // ...through ONE lifter.
+      expect(lifterFactoryMock).toHaveBeenCalledTimes(1);
     });
 
     it('honors IC_NAME for the friendly Account.name', async () => {
