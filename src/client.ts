@@ -52,28 +52,33 @@ export class ICClient {
    * first call to `ensureDiscovery()`.
    */
   private fetchproxyMode = false;
-  private fetchproxyDiscoveryRan = false;
-  /** fetchproxy cookies, consumed by the primary manager's first login. */
-  private preloaded: { cookieHeader: string; xsrfToken: string } | null = null;
+  /**
+   * fetchproxy lift. Called by the primary manager's login — on the first
+   * request AND on every renewal, which is what keeps the path alive past
+   * JSESSIONID's idle timeout.
+   */
+  private refreshSession: (() => Promise<ICSession>) | null = null;
 
   /**
-   * `preloaded` is the fetchproxy escape hatch: when set, the client treats
-   * the supplied cookies as a freshly-completed login on the primary account.
-   * This skips the `verify.jsp` POST entirely (the account has empty creds
-   * in this mode) but otherwise behaves identically — CUPS linked-district
-   * discovery still runs on first request, 401 retry still triggers a
-   * re-login. On a 401 with empty credentials we can't re-login from Node;
-   * the user must re-sign-in in the browser.
+   * `refreshSession` is the fetchproxy escape hatch: when set, it REPLACES
+   * the `verify.jsp` POST as the way this client mints a primary session.
+   * It is called lazily on the first request and again on every expiry, so a
+   * lapsed servlet session recovers by re-reading the browser rather than
+   * dead-ending. CUPS linked-district discovery still runs on first request.
+   *
+   * It must re-read the browser each time rather than return a captured
+   * value: JSESSIONID lapses on a short idle timer and the account has no
+   * credentials to fall back on.
    */
   constructor(
     account: Account,
-    opts: { preloaded?: { cookieHeader: string; xsrfToken: string } } = {},
+    opts: { refreshSession?: () => Promise<ICSession> } = {},
   ) {
     this.accounts.set(account.name, account);
     this.primaryName = account.name;
     this.managers.set(account.name, this.makeManager(account));
-    if (opts.preloaded) {
-      this.preloaded = opts.preloaded;
+    if (opts.refreshSession) {
+      this.refreshSession = opts.refreshSession;
       this.fetchproxyMode = true;
     }
   }
@@ -130,16 +135,11 @@ export class ICClient {
   async ensureDiscovery(): Promise<void> {
     // Ensure primary account is logged in, which triggers CUPS linked-district discovery
     const session = await this.managers.get(this.primaryName)!.ensure();
-    // fetchproxy mode skips the verify.jsp login and therefore the discovery
-    // call inside it. Run discovery directly the first time someone asks for
-    // it. The primary is never in linkedTo (it's the root of the linkedTo
-    // map). When login() runs for an already-linked district during a TTL
-    // refresh, it re-auths through the primary instead of running discovery
-    // itself.
-    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan) {
-      this.fetchproxyDiscoveryRan = true;
-      await this.discoverLinkedDistricts(this.accounts.get(this.primaryName)!, session);
-    }
+    // Nothing further to do: `ensure()` mints the primary session when one is
+    // needed, and every primary mint runs discovery — in fetchproxy mode via
+    // login()'s lift branch, in env mode via mintSessionCookie(). A cached
+    // primary session means discovery already ran for it.
+    void session;
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -181,15 +181,7 @@ export class ICClient {
       account = this.accounts.get(district);
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
-    const session = await this.managers.get(account.name)!.ensure();
-    // In fetchproxy mode, the preloaded-cookie login never runs verify.jsp
-    // and therefore never calls discoverLinkedDistricts. Run discovery once
-    // on the first primary call so linked districts are discoverable. (The
-    // primary is never in linkedTo by construction.)
-    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan && account.name === this.primaryName) {
-      this.fetchproxyDiscoveryRan = true;
-      await this.discoverLinkedDistricts(account, session);
-    }
+    await this.managers.get(account.name)!.ensure();
     return this.doRequest<T>(account, path, opts);
   }
 
@@ -223,13 +215,20 @@ export class ICClient {
       return restored;
     }
 
-    // fetchproxy mode: the first primary login consumes the preloaded browser
-    // cookies instead of POSTing to verify.jsp. Consumed exactly once — after
-    // an expiry/invalidate there is nothing left to re-login with (below).
-    if (this.preloaded) {
-      const { cookieHeader, xsrfToken } = this.preloaded;
-      this.preloaded = null;
-      return { cookieHeader, xsrfToken };
+    // fetchproxy mode: mint the primary session by re-reading the browser
+    // instead of POSTing to verify.jsp. This runs on EVERY login, not just
+    // the first — a lapsed JSESSIONID recovers by lifting the live session
+    // the browser still holds, which is the whole point.
+    if (this.refreshSession) {
+      const session = await this.refreshSession();
+      // Mirror mintSessionCookie(): a primary re-mint re-runs CUPS discovery
+      // so linked districts get re-seeded. Without this a linked district
+      // could never recover — its login() defers to the primary and then
+      // reads `current`, which would stay unset because the primary's mint
+      // short-circuited past discovery. By construction we only reach here
+      // for the primary (linked districts return early above).
+      await this.discoverLinkedDistricts(account, session);
+      return session;
     }
 
     // fetchproxy mode: empty primary creds, can't post to verify.jsp.
@@ -240,7 +239,7 @@ export class ICClient {
       throw new AuthFailedError(
         account.name,
         'session expired and no IC_USERNAME/IC_PASSWORD set — ' +
-          'sign back into your IC portal in the browser and restart the MCP',
+          'sign back into your IC portal in the browser, or set IC_USERNAME/IC_PASSWORD',
         { permanent: true },
       );
     }

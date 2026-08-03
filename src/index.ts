@@ -44,13 +44,13 @@ const AI_NOTICE =
 // IC portal in the browser). When not configured we register no tools and
 // log a clear stderr message — far better than the previous crash loop.
 let account: Account | null = null;
-let preloaded: ResolvedAuth['preloaded'];
+let refreshSession: ResolvedAuth['refresh'];
 let source: ResolvedAuth['source'] | undefined;
 let configError: Error | null = null;
 try {
   const resolved = await resolveAuth();
   account = resolved.account;
-  preloaded = resolved.preloaded;
+  refreshSession = resolved.refresh;
   source = resolved.source;
 } catch (e) {
   configError = e as Error;
@@ -68,7 +68,7 @@ const COMMON: Pick<RunMcpOptions, 'name' | 'version'> = {
 };
 
 if (account) {
-  const client = new ICClient(account, { preloaded });
+  const client = new ICClient(account, { refreshSession });
   const tools: ToolRegistrar<ICClient>[] = [
     registerDistrictTools,
     registerStudentTools,

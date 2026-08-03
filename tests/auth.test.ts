@@ -92,7 +92,9 @@ describe('resolveAuth', () => {
       });
 
       const result = await resolveAuth();
-
+      // Lazy: nothing is read from the browser until the client asks.
+      expect(bootstrapMock).not.toHaveBeenCalled();
+      const lifted = await result.refresh!();
       expect(bootstrapMock).toHaveBeenCalledTimes(1);
       const opts = bootstrapMock.mock.calls[0]![0] as {
         serverName: string;
@@ -122,8 +124,8 @@ describe('resolveAuth', () => {
         username: '',
         password: '',
       });
-      expect(result.preloaded?.cookieHeader).toBe('JSESSIONID=sess-from-fp; XSRF-TOKEN=xsrf-from-fp');
-      expect(result.preloaded?.xsrfToken).toBe('xsrf-from-fp');
+      expect(lifted.cookieHeader).toBe('JSESSIONID=sess-from-fp; XSRF-TOKEN=xsrf-from-fp');
+      expect(lifted.xsrfToken).toBe('xsrf-from-fp');
     });
 
     it('honors IC_NAME for the friendly Account.name', async () => {
@@ -151,7 +153,7 @@ describe('resolveAuth', () => {
         capturedHeaders: {},
       });
 
-      await resolveAuth();
+      await (await resolveAuth()).refresh!();
       const opts = bootstrapMock.mock.calls[0]![0] as { domains: string[] };
       expect(opts.domains).toEqual(['campus.springfield.k12.example.us']);
     });
@@ -165,8 +167,8 @@ describe('resolveAuth', () => {
         sessionStorage: {},
         capturedHeaders: {},
       });
-      await expect(resolveAuth()).rejects.toThrow(/JSESSIONID/);
-      await expect(resolveAuth()).rejects.toThrow(/Sign into your IC portal/i);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/JSESSIONID/);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/Sign into your IC portal/i);
     });
 
     it('throws when XSRF-TOKEN is missing from the snapshot', async () => {
@@ -178,21 +180,21 @@ describe('resolveAuth', () => {
         sessionStorage: {},
         capturedHeaders: {},
       });
-      await expect(resolveAuth()).rejects.toThrow(/XSRF-TOKEN/);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/XSRF-TOKEN/);
     });
 
     it('wraps bootstrap() errors with an actionable suffix', async () => {
       process.env.IC_BASE_URL = 'https://anoka.infinitecampus.org';
       process.env.IC_DISTRICT = 'anoka';
       bootstrapMock.mockRejectedValue(new Error('extension offline'));
-      await expect(resolveAuth()).rejects.toThrow(/fetchproxy fallback failed: extension offline/);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/fetchproxy lift failed: extension offline/);
     });
 
     it('handles non-Error rejections from bootstrap()', async () => {
       process.env.IC_BASE_URL = 'https://anoka.infinitecampus.org';
       process.env.IC_DISTRICT = 'anoka';
       bootstrapMock.mockRejectedValue('plain string failure');
-      await expect(resolveAuth()).rejects.toThrow(/fetchproxy fallback failed: plain string failure/);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/fetchproxy lift failed: plain string failure/);
     });
 
     it('surfaces FetchproxyBridgeDownError.hint verbatim when the SW retry exhausts', async () => {
@@ -211,8 +213,8 @@ describe('resolveAuth', () => {
       });
       bootstrapMock.mockRejectedValue(downErr);
 
-      await expect(resolveAuth()).rejects.toThrow(/fetchproxy bridge is down/);
-      await expect(resolveAuth()).rejects.toThrow(downErr.hint.slice(0, 20));
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(/fetchproxy bridge is down/);
+      await expect((await resolveAuth()).refresh!()).rejects.toThrow(downErr.hint.slice(0, 20));
     });
   });
 
@@ -292,8 +294,9 @@ describe('resolveAuth', () => {
           sessionStorage: {},
           capturedHeaders: {},
         });
-        await resolveAuth();
-        expect(bootstrapMock).toHaveBeenCalled();
+        const result = await resolveAuth();
+        expect(result.source).toBe('fetchproxy');
+        expect(typeof result.refresh).toBe('function');
       },
     );
 
@@ -309,8 +312,9 @@ describe('resolveAuth', () => {
           sessionStorage: {},
           capturedHeaders: {},
         });
-        await resolveAuth();
-        expect(bootstrapMock).toHaveBeenCalled();
+        const result = await resolveAuth();
+        expect(result.source).toBe('fetchproxy');
+        expect(typeof result.refresh).toBe('function');
       },
     );
   });

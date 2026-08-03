@@ -42,7 +42,7 @@ Tools that the harness will gate as write/IO operations: `ic_download_document`.
    IC_PASSWORD=...
    IC_NAME=Springfield           # optional, defaults to IC_DISTRICT
    ```
-2. **fetchproxy fallback (no password needed).** Set only `IC_BASE_URL` + `IC_DISTRICT` (still required so the MCP knows which host to talk to and which district to dispatch on), then install the [fetchproxy 0.3.0 extension](https://github.com/chrischall/fetchproxy) (Chrome Web Store / Safari `.dmg`) and sign into your IC portal once. The MCP reads the `JSESSIONID` (HttpOnly) + `XSRF-TOKEN` cookies on startup and goes direct-to-API from Node thereafter — the extension is **not** in the request hot path.
+2. **fetchproxy fallback (no password needed).** Set only `IC_BASE_URL` + `IC_DISTRICT` (still required so the MCP knows which host to talk to and which district to dispatch on), then install the [fetchproxy 0.3.0 extension](https://github.com/chrischall/fetchproxy) (Chrome Web Store / Safari `.dmg`) and sign into your IC portal once. The MCP reads the `JSESSIONID` (HttpOnly) + `XSRF-TOKEN` cookies from that tab and goes direct-to-API from Node thereafter — the extension is **not** in the request hot path. The read is repeated whenever the session lapses (JSESSIONID is a servlet session with a short idle timeout), so you stay signed in without restarting the MCP.
 
 Set `IC_DISABLE_FETCHPROXY=1` to opt out of the fallback (turns missing credentials into a hard error — useful in headless CI).
 
