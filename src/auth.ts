@@ -47,7 +47,7 @@
 //   - `loadAccount()` (the existing env-var resolver) is reused as-is so the
 //     legacy paths keep working unchanged.
 
-import { bootstrap } from '@fetchproxy/bootstrap';
+import { createSessionLifter, type SessionLifter } from '@fetchproxy/bootstrap';
 import { classifyBridgeError, FetchproxyBridgeDownError } from '@chrischall/mcp-utils/fetchproxy';
 import { parseBoolEnv } from '@chrischall/mcp-utils';
 import { loadAccount, type Account } from './config.js';
@@ -146,10 +146,21 @@ export async function resolveAuth(): Promise<ResolvedAuth> {
  * cookies, and closes it again — fetchproxy is not in the request hot path,
  * only in the renewal path.
  */
-async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
-  try {
-    const host = new URL(account.baseUrl).hostname;
-    const session = await bootstrap({
+/**
+ * One lifter per host, built lazily and reused.
+ *
+ * Unlike most MCPs the declared scope is not static — IC tenants live on
+ * per-district hosts — so the lifter cannot be a module-level constant.
+ * Caching by host still matters: `createSessionLifter` single-flights
+ * concurrent calls, and that only helps if renewals share ONE lifter instead
+ * of constructing a fresh one each time.
+ */
+const liftersByHost = new Map<string, SessionLifter>();
+
+function lifterFor(host: string): SessionLifter {
+  let lift = liftersByHost.get(host);
+  if (!lift) {
+    lift = createSessionLifter({
       serverName: pkg.name,
       version: pkg.version,
       // IC tenants live on per-district hosts (campus.<district>.org,
@@ -167,6 +178,21 @@ async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
         captureHeaders: [],
       },
     });
+    liftersByHost.set(host, lift);
+  }
+  return lift;
+}
+
+/**
+ * Lift a fresh IC session out of the user's signed-in portal tab.
+ *
+ * Runs on every login/renewal, not once at startup — fetchproxy is not in the
+ * request hot path, only the renewal path.
+ */
+async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
+  try {
+    const host = new URL(account.baseUrl).hostname;
+    const session = await lifterFor(host)();
 
     const jsessionid = session.cookies['JSESSIONID'];
     const xsrf = session.cookies['XSRF-TOKEN'];
