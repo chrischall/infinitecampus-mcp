@@ -52,7 +52,6 @@ export class ICClient {
    * first call to `ensureDiscovery()`.
    */
   private fetchproxyMode = false;
-  private fetchproxyDiscoveryRan = false;
   /**
    * fetchproxy lift. Called by the primary manager's login — on the first
    * request AND on every renewal, which is what keeps the path alive past
@@ -136,16 +135,11 @@ export class ICClient {
   async ensureDiscovery(): Promise<void> {
     // Ensure primary account is logged in, which triggers CUPS linked-district discovery
     const session = await this.managers.get(this.primaryName)!.ensure();
-    // fetchproxy mode skips the verify.jsp login and therefore the discovery
-    // call inside it. Run discovery directly the first time someone asks for
-    // it. The primary is never in linkedTo (it's the root of the linkedTo
-    // map). When login() runs for an already-linked district during a TTL
-    // refresh, it re-auths through the primary instead of running discovery
-    // itself.
-    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan) {
-      this.fetchproxyDiscoveryRan = true;
-      await this.discoverLinkedDistricts(this.accounts.get(this.primaryName)!, session);
-    }
+    // Nothing further to do: `ensure()` mints the primary session when one is
+    // needed, and every primary mint runs discovery — in fetchproxy mode via
+    // login()'s lift branch, in env mode via mintSessionCookie(). A cached
+    // primary session means discovery already ran for it.
+    void session;
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -187,15 +181,7 @@ export class ICClient {
       account = this.accounts.get(district);
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
-    const session = await this.managers.get(account.name)!.ensure();
-    // In fetchproxy mode, the preloaded-cookie login never runs verify.jsp
-    // and therefore never calls discoverLinkedDistricts. Run discovery once
-    // on the first primary call so linked districts are discoverable. (The
-    // primary is never in linkedTo by construction.)
-    if (this.fetchproxyMode && !this.fetchproxyDiscoveryRan && account.name === this.primaryName) {
-      this.fetchproxyDiscoveryRan = true;
-      await this.discoverLinkedDistricts(account, session);
-    }
+    await this.managers.get(account.name)!.ensure();
     return this.doRequest<T>(account, path, opts);
   }
 
@@ -234,7 +220,15 @@ export class ICClient {
     // the first — a lapsed JSESSIONID recovers by lifting the live session
     // the browser still holds, which is the whole point.
     if (this.refreshSession) {
-      return this.refreshSession();
+      const session = await this.refreshSession();
+      // Mirror mintSessionCookie(): a primary re-mint re-runs CUPS discovery
+      // so linked districts get re-seeded. Without this a linked district
+      // could never recover — its login() defers to the primary and then
+      // reads `current`, which would stay unset because the primary's mint
+      // short-circuited past discovery. By construction we only reach here
+      // for the primary (linked districts return early above).
+      await this.discoverLinkedDistricts(account, session);
+      return session;
     }
 
     // fetchproxy mode: empty primary creds, can't post to verify.jsp.

@@ -1562,17 +1562,17 @@ describe('ICClient — fetchproxy mode (preloaded session)', () => {
     expect(cupsCalls).toHaveLength(1);
   });
 
-  it('refuses to attempt verify.jsp when primary creds are empty (TTL expiry)', async () => {
-    // Force TTL expiry on the preloaded session, then request again — login()
-    // should throw AuthFailedError instead of POSTing to verify.jsp with
-    // empty creds.
+  it('renews via the lift on TTL expiry, never POSTing empty creds to verify.jsp', async () => {
+    // Force TTL expiry on the lifted session, then request again. The client
+    // must re-lift rather than POST verify.jsp with the synthesized empty
+    // credentials — that POST would yield a misleading password error.
     fetchSpy
       .mockResolvedValueOnce(noLinkedAccounts())
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: 1 }), {
         status: 200, headers: { 'content-type': 'application/json' },
       }));
 
-    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ ok: 1 }), {
+    fetchSpy.mockImplementation(async () => new Response(JSON.stringify({ ok: 1 }), {
       status: 200, headers: { 'content-type': 'application/json' },
     }));
     const lift = vi.fn(async () => preloaded);
@@ -1674,6 +1674,69 @@ describe('ICClient — fetchproxy session renewal', () => {
     );
     const retryHeaders = (sent.at(-1)![1] as RequestInit).headers as Record<string, string>;
     expect(retryHeaders.Cookie).toBe('JSESSIONID=fresh');
+  });
+
+  // Regression for the FAIL finding on #113: in fetchproxy mode the primary's
+  // login short-circuited to the lift and never ran discoverLinkedDistricts,
+  // while `fetchproxyDiscoveryRan` latched true after the first request. A
+  // linked district that lost its session therefore re-authed "through the
+  // primary" into a primary that never re-seeded it — permanently broken until
+  // an MCP restart. Env mode never had this: mintSessionCookie() ends with
+  // discovery, so every primary re-mint re-seeds.
+  it('re-seeds a linked district when its session dies (fetchproxy mode)', async () => {
+    const linkedAccount = {
+      districtName: 'district2',
+      clientId: 'client2',
+      districtLoginUrl: 'https://d2.infinitecampus.org/campus/verify.jsp',
+      appName: 'district2app',
+      userId: 42,
+      state: 'ACTIVE',
+    };
+    const refreshSession = vi.fn(async () => ({
+      cookieHeader: 'JSESSIONID=primary',
+      xsrfToken: 'xsrf1',
+    }));
+    let linkedDataCalls = 0;
+
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [linkedAccount] }), { status: 200 });
+      }
+      if (u.includes('/cups/loginToken')) {
+        return new Response(JSON.stringify({ token: { token: 'jwt123' } }), { status: 200 });
+      }
+      if (u.includes('/userAccountSwitch/originalDistrict')) {
+        return new Response(JSON.stringify({ clientID: 'orig123' }), { status: 200 });
+      }
+      if (u.includes('/districts/current')) {
+        return new Response(JSON.stringify({ name: 'Anoka District' }), { status: 200 });
+      }
+      if (u.includes('d2.infinitecampus.org/campus/verify.jsp')) {
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': 'JSESSIONID=linked-sess; Path=/, XSRF-TOKEN=xsrf-linked; Path=/' },
+        });
+      }
+      if (u.includes('d2.infinitecampus.org')) {
+        linkedDataCalls++;
+        // First linked call 401s; the replay must succeed off a re-seeded session.
+        if (linkedDataCalls === 1) return new Response('', { status: 401 });
+        return new Response(JSON.stringify({ data: 'refreshed' }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ data: 'ok' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const client = new ICClient(fpAccount, { refreshSession });
+    await client.request('anoka', '/campus/api/test');
+    expect(client.listDistricts()).toHaveLength(2);
+
+    const result = await client.request<{ data: string }>('district2', '/campus/api/test');
+    expect(result).toEqual({ data: 'refreshed' });
   });
 
   it('surfaces a lift failure during renewal instead of a generic 401', async () => {
