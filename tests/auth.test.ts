@@ -49,6 +49,7 @@ describe('resolveAuth', () => {
       delete process.env[k];
     }
     bootstrapMock.mockReset();
+    lifterFactoryMock.mockClear();
   });
 
   afterEach(() => {
@@ -143,8 +144,12 @@ describe('resolveAuth', () => {
     // constructing a fresh one per refresh would compile fine and silently
     // give the behavior back. Assert on construction count, not just reads.
     it('builds one lifter per host and reuses it across renewals', async () => {
-      process.env.IC_BASE_URL = 'https://anoka.infinitecampus.org';
-      process.env.IC_DISTRICT = 'anoka';
+      // A host no other test touches. `liftersByHost` is module-level and
+      // persists across cases, so reusing a shared host would either count an
+      // earlier test's construction or (once the counter is reset per test)
+      // see zero — either way the assertion stops meaning anything.
+      process.env.IC_BASE_URL = 'https://campus.cache-probe.example.us';
+      process.env.IC_DISTRICT = 'probe';
       bootstrapMock.mockResolvedValue({
         cookies: { JSESSIONID: 's', 'XSRF-TOKEN': 'x' },
         localStorage: {},
