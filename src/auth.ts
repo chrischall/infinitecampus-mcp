@@ -159,6 +159,18 @@ function lifterFor(host: string): SessionLifter {
       // <district>.infinitecampus.org, etc.). Declare just this host
       // — each district is its own root, no wildcard needed.
       domains: [host],
+      // IC is a Tomcat app deployed at /campus, and Tomcat scopes JSESSIONID
+      // to the servlet context by default:
+      //
+      //   JSESSIONID=...; Path=/campus; Secure; HttpOnly; SameSite=Lax
+      //
+      // chrome.cookies.get matches that Path against the URL it is given, so a
+      // read aimed at the origin root silently returns nothing — which is
+      // indistinguishable from "the user is signed out", and is why this path
+      // never worked on any tenant. Verified live: without this the lift found
+      // no cookies while a fetch through the same tab returned authenticated
+      // data; with it, JSESSIONID + XSRF-TOKEN both come back.
+      storagePath: '/campus',
       declare: {
         // JSESSIONID is HttpOnly (chrome.cookies.get sees it; the
         // security gate is the declared key list). XSRF-TOKEN is
