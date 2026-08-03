@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.2...v2.4.3) (2026-08-03)
+
+
+### Bug Fixes
+
+* **auth:** renew the browser session instead of dead-ending on expiry ([#113](https://github.com/chrischall/infinitecampus-mcp/issues/113)) ([3ac27d4](https://github.com/chrischall/infinitecampus-mcp/commit/3ac27d4dfd74604abce1e502bcbc7ee44ab9d4a8))
+
+
+### Refactor
+
+* **auth:** collapse the hand-rolled lifter onto createSessionLifter ([#116](https://github.com/chrischall/infinitecampus-mcp/issues/116)) ([3586401](https://github.com/chrischall/infinitecampus-mcp/commit/35864018b853a4f474d3d2b28b59b21f6db13715))
+
 ## [2.4.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.1...v2.4.2) (2026-07-30)
 
 
