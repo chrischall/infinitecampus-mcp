@@ -168,6 +168,31 @@ describe('resolveAuth', () => {
       expect(lifterFactoryMock).toHaveBeenCalledTimes(1);
     });
 
+    // IC is a Tomcat app at /campus and Tomcat scopes JSESSIONID to the
+    // servlet context, so the cookie read must target that path. Without it
+    // chrome.cookies.get matches Path=/campus against a root URL, finds
+    // nothing, and the miss looks exactly like "signed out" — which is why
+    // this path never worked on any tenant.
+    it('declares the /campus cookie path JSESSIONID is scoped to', async () => {
+      process.env.IC_BASE_URL = 'https://600.ncsis.gov';
+      process.env.IC_DISTRICT = 'psu600cms';
+      bootstrapMock.mockResolvedValue({
+        cookies: { JSESSIONID: 's', 'XSRF-TOKEN': 'x' },
+        localStorage: {},
+        sessionStorage: {},
+        capturedHeaders: {},
+      });
+
+      await (await resolveAuth()).refresh!();
+      const opts = bootstrapMock.mock.calls[0]![0] as {
+        domains: string[];
+        storagePath?: string;
+      };
+      // Host declaration is unchanged — the path is additive.
+      expect(opts.domains).toEqual(['600.ncsis.gov']);
+      expect(opts.storagePath).toBe('/campus');
+    });
+
     it('honors IC_NAME for the friendly Account.name', async () => {
       process.env.IC_BASE_URL = 'https://anoka.infinitecampus.org';
       process.env.IC_DISTRICT = 'anoka';
