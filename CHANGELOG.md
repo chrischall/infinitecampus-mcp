@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.3...v2.4.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* **auth:** declare the /campus cookie path JSESSIONID is scoped to ([#121](https://github.com/chrischall/infinitecampus-mcp/issues/121)) ([8a7a0ad](https://github.com/chrischall/infinitecampus-mcp/commit/8a7a0ad680007163ee2c1c2c784dd7ccb85dd24a))
+
 ## [2.4.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.2...v2.4.3) (2026-08-03)
 
 
