@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.4...v2.4.5) (2026-08-06)
+
+
+### Bug Fixes
+
+* **deps:** move to @fetchproxy/server 2.0.0 for the v3 handshake ([#126](https://github.com/chrischall/infinitecampus-mcp/issues/126)) ([ec2f202](https://github.com/chrischall/infinitecampus-mcp/commit/ec2f20293a4d5f475821bb0f9a697f575fd12d10))
+
 ## [2.4.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.3...v2.4.4) (2026-08-03)
 
 
