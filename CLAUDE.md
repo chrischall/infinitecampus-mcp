@@ -95,10 +95,10 @@ Tests live under `tests/` mirroring `src/`. Run with `npm test`. No real API cal
 ```
 .claude-plugin/plugin.json       # Claude Code plugin manifest (skill + .mcp.json ref)
 .claude-plugin/marketplace.json  # Marketplace catalog entry
-- `mint.yaml` — hosting manifest read by mcp-host to fill the registration wizard (env, egress, state). Ships in the npm tarball; not in the `.mcpb` bundle.
 .mcp.json                        # Plugin-runtime MCP server config (uses ${CLAUDE_PLUGIN_ROOT})
 manifest.json                    # MCPB / DXT bundle manifest (user_config + tool catalog)
 server.json                      # modelcontextprotocol/registry entry
+mint.yaml                        # mcp-host hosting manifest (env / egress / state for registration)
 skills/ic/SKILL.md               # Claude Code skill — when/how to use the tools (packaged .skill file, zipped in Release workflow)
 ```
 
