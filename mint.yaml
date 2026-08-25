@@ -1,0 +1,56 @@
+version: 1
+name: Infinite Campus
+slug: infinitecampus
+summary: >-
+  Infinite Campus (Campus Parent) MCP — single-account with CUPS
+  auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via
+  the fetchproxy browser extension.
+#
+# Hosting note (a comment, not user-facing summary text): this is a
+# BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
+# tab via the fetchproxy bridge. A bridged registration also needs runtime
+# `fly-shared`, `bridge: true` and a `bridgePortEnv`, which are registration
+# fields this manifest has no schema for (set them over the control API).
+# `state.dataDir` below is required for `bridge`.
+env:
+  - name: IC_BASE_URL
+    required: true
+    help: >-
+      Campus Parent portal base URL, e.g. https://campus.district.k12.example.us
+  - name: IC_DISTRICT
+    required: true
+    help: >-
+      Infinite Campus district app name (appName path segment from the portal
+      URL)
+  - name: IC_USERNAME
+    required: false
+    help: >-
+      Campus Parent portal username. Optional: leave unset to use the fetchproxy
+      browser-extension fallback.
+  - name: IC_PASSWORD
+    secret: true
+    required: false
+    help: >-
+      Campus Parent portal password. Required only when IC_USERNAME is set.
+  - name: IC_NAME
+    required: false
+    help: >-
+      Friendly name for the district (defaults to district appname)
+  - name: IC_DISABLE_FETCHPROXY
+    required: false
+    help: >-
+      Set to 1 to skip the fetchproxy browser-extension fallback (missing creds
+      become a hard error — useful in headless CI).
+state:
+  dataDir: true
+  reason: >-
+    The fetchproxy identity lives at $HOME/.fetchproxy/identity/<name>.json
+    and the pair code derives from it. Without a persistent $HOME every cold
+    start mints a fresh identity and re-prompts pairing in the browser; the
+    API refuses bridge without it.
+# egress: intentionally NOT declared.
+#
+# This server's upstream host is per-deployment, so no fixed allowlist can
+# be correct here. On the isolated tier, allow:
+#   your district's Infinite Campus host, from IC_BASE_URL (districts are each on their own host, e.g. <district>.infinitecampus.org)
+# Everything else in this file applies regardless of which host that is.
