@@ -41,13 +41,27 @@ env:
     help: >-
       Set to 1 to skip the fetchproxy browser-extension fallback (missing creds
       become a hard error — useful in headless CI).
+  - name: IC_SESSION_CACHE
+    required: false
+    help: >-
+      Set to false to disable the on-disk session cache and authenticate on
+      every process start. Defaults to enabled.
+  - name: IC_SESSION_FILE
+    required: false
+    help: >-
+      Absolute path for the session cache file. Defaults to
+      $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json.
 state:
   dataDir: true
   reason: >-
-    The fetchproxy identity lives at $HOME/.fetchproxy/identity/<name>.json
-    and the pair code derives from it. Without a persistent $HOME every cold
-    start mints a fresh identity and re-prompts pairing in the browser; the
-    API refuses bridge without it.
+    Two things live here. The fetchproxy identity is at
+    $HOME/.fetchproxy/identity/<name>.json and the pair code derives from it —
+    without a persistent $HOME every cold start mints a fresh identity and
+    re-prompts pairing in the browser, and the API refuses bridge without it.
+    The primary district's session is also cached at
+    $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json (0600), which
+    matters most on that same path: this mode cannot re-login unaided, so a
+    cached session is what lets a cold start proceed with no browser present.
 # egress: intentionally NOT declared.
 #
 # This server's upstream host is per-deployment, so no fixed allowlist can

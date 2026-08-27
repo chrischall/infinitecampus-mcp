@@ -3,6 +3,7 @@ import { dirname } from 'path';
 import { parseCookieJar } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
 import type { Account } from './config.js';
+import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
 
 /** Cookie session for one district, minted by verify.jsp or a CUPS switch. */
 interface ICSession {
@@ -53,6 +54,13 @@ export class ICClient {
    */
   private fetchproxyMode = false;
   /**
+   * Whether CUPS linked-district discovery has run IN THIS PROCESS. Not "is
+   * there a session" — a session restored from the on-disk cache is real while
+   * discovery has not run, and conflating the two leaves linked districts
+   * invisible. See {@link InfiniteCampusClient.ensureDiscovery}.
+   */
+  private discoveryDone = false;
+  /**
    * fetchproxy lift. Called by the primary manager's login — on the first
    * request AND on every renewal, which is what keeps the path alive past
    * JSESSIONID's idle timeout.
@@ -101,8 +109,26 @@ export class ICClient {
    *   bookkeeping used to provide.
    */
   private makeManager(account: Account): CookieSessionManager<ICSession> {
+    // PRIMARY ONLY. A linked district's session is seeded by the primary's
+    // discovery and has no `linkedTo` entry behind it until that runs, so a
+    // linked record restored on its own would be a session belonging to nothing.
+    // Caching the primary is what makes the expensive part free; discovery
+    // re-runs from the restored session and re-establishes the rest.
+    const cache =
+      account.name === this.primaryName
+        ? createSessionCache({
+            district: account.name,
+            baseUrl: account.baseUrl,
+            username: account.username,
+            password: account.password,
+            browserBacked: this.fetchproxyMode,
+          })
+        : null;
+
     return createCookieSessionManager<ICSession>({
       login: () => this.login(account),
+      persistence: cache ?? undefined,
+      onPersistError: reportCacheWriteFailure,
       isExpired: (res) => this.detectExpiredSession(account.name, res),
       isPermanentError: (e) => e instanceof AuthFailedError && e.permanent,
       maxAgeMs: SESSION_TTL_MS,
@@ -133,13 +159,22 @@ export class ICClient {
   }
 
   async ensureDiscovery(): Promise<void> {
-    // Ensure primary account is logged in, which triggers CUPS linked-district discovery
     const session = await this.managers.get(this.primaryName)!.ensure();
-    // Nothing further to do: `ensure()` mints the primary session when one is
-    // needed, and every primary mint runs discovery — in fetchproxy mode via
-    // login()'s lift branch, in env mode via mintSessionCookie(). A cached
-    // primary session means discovery already ran for it.
-    void session;
+    // This used to be a no-op, resting on "a cached primary session means
+    // discovery already ran for it". That held while the only cache was in
+    // memory: a session in hand implied THIS process had minted it, and every
+    // mint runs discovery. A session RESTORED from disk breaks it — the session
+    // is real, discovery never ran here, and `accounts`/`linkedTo` are empty,
+    // so linked districts would silently not exist.
+    //
+    // Tracking it explicitly is the fix, and it is the right shape regardless
+    // of persistence: the invariant is "discovery has run in this process",
+    // which is now stated rather than inferred from a side effect.
+    if (this.discoveryDone) return;
+    // Non-null like every other primary lookup in this file: the constructor
+    // registers the primary account and sets primaryName from it, so the entry
+    // always exists. A defensive `if` here would just be an untestable branch.
+    await this.discoverLinkedDistricts(this.accounts.get(this.primaryName)!, session);
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -302,6 +337,11 @@ export class ICClient {
   }
 
   private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<void> {
+    // Set up front, not on success: this method swallows its own errors by
+    // design (a district without CUPS returns early), so "completed" is the
+    // right signal, not "found something". Retrying a silent no-op on every
+    // call would spend three requests each time for nothing.
+    this.discoveryDone = true;
     try {
       const baseHeaders = {
         Cookie: session.cookieHeader,

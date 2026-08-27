@@ -1796,3 +1796,90 @@ describe('ICClient — fetchproxy session renewal', () => {
     await expect(client.request('anoka', '/campus/api/test')).rejects.toThrow();
   });
 });
+
+describe('ICClient.ensureDiscovery with a restored session', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  it('runs discovery when the session came from the cache, not from a login', async () => {
+    // THE reason this repo could not take the cache as a template. ensureDiscovery
+    // used to be a no-op resting on "a cached primary session means discovery
+    // already ran for it" — true while the only cache was in memory, false for a
+    // session restored from disk. Without the explicit flag, linked districts
+    // would silently not exist after a restart.
+    const dir = await mkdtemp(join(tmpdir(), 'ic-restore-'));
+    try {
+      const file = join(dir, 'session.json');
+      vi.stubEnv('IC_SESSION_CACHE', 'true');
+      vi.stubEnv('IC_SESSION_FILE', file);
+
+      // Seed the cache the way the client itself would, then confirm a fresh
+      // client restores it WITHOUT logging in.
+      const seeded = new ICClient(primaryAccount);
+      const logins: string[] = [];
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+        const u = String(url);
+        if (u.includes('verify.jsp')) {
+          logins.push(u);
+          return new Response('', {
+            status: 200,
+            headers: { 'set-cookie': 'JSESSIONID=seeded; Path=/' },
+          });
+        }
+        return noLinkedAccounts();
+      }) as unknown as typeof fetch);
+      await seeded.ensureDiscovery();
+      expect(logins.length).toBeGreaterThan(0);
+
+      // A second client is a second process for these purposes.
+      logins.length = 0;
+      const cupsCalls: string[] = [];
+      fetchSpy.mockImplementation((async (url: string) => {
+        const u = String(url);
+        if (u.includes('verify.jsp')) {
+          logins.push(u);
+          return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
+        }
+        if (u.includes('cups/linkedAccounts')) cupsCalls.push(u);
+        return noLinkedAccounts();
+      }) as unknown as typeof fetch);
+
+      const restored = new ICClient(primaryAccount);
+      await restored.ensureDiscovery();
+
+      expect(logins).toHaveLength(0); // the session came from disk
+      expect(cupsCalls.length).toBeGreaterThan(0); // and discovery STILL ran
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not repeat discovery once it has run in this process', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ic-once-'));
+    try {
+      vi.stubEnv('IC_SESSION_CACHE', 'false');
+      const cupsCalls: string[] = [];
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+        const u = String(url);
+        if (u.includes('verify.jsp')) {
+          return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
+        }
+        if (u.includes('cups/linkedAccounts')) cupsCalls.push(u);
+        return noLinkedAccounts();
+      }) as unknown as typeof fetch);
+
+      const client = new ICClient(primaryAccount);
+      await client.ensureDiscovery();
+      const after = cupsCalls.length;
+      await client.ensureDiscovery();
+      // Discovery swallows its own errors, so retrying a silent no-op would
+      // spend three requests on every call for nothing.
+      expect(cupsCalls.length).toBe(after);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
