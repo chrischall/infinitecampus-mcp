@@ -8,7 +8,7 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config; li
 npm run build        # tsc → dist/ + esbuild bundle → dist/bundle.js
 npm run bundle       # esbuild only (skip tsc)
 npm run dev          # node --env-file=.env dist/index.js (requires built dist/)
-npm test             # vitest run (all tests)
+npm test             # tsc typecheck + vitest run (all tests)
 npm run test:watch   # vitest in watch mode
 ```
 
