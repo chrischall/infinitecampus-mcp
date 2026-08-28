@@ -28,6 +28,9 @@ src/
   config.ts            # loadAccount() — IC_* env loader over mcp-utils readEnvVar.
                        #   IC_BASE_URL+IC_DISTRICT required;
                        #   IC_USERNAME+IC_PASSWORD optional (both or neither — partial = error)
+IC_SESSION_CACHE=false          # Optional. Disable the on-disk session cache (default on).
+IC_SESSION_FILE=<path>          # Optional. Cache path. Defaults to
+                                #   $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json
   client.ts            # ICClient — one CookieSessionManager (mcp-utils/session) per district,
                        #   lazy single-flight login, 401 replay via withSession, CUPS
                        #   linked-district discovery, download(). Accepts preloaded cookies

@@ -180,3 +180,20 @@ describe('cache disabled writes nothing', () => {
     expect(existsSync(join(dir, '.infinitecampus-mcp'))).toBe(false);
   });
 });
+
+describe('fetchproxy mode actually gets a cache', () => {
+  it('binds in browserBacked mode even though credentials are empty', () => {
+    // The bug this pins: the client set fetchproxyMode AFTER building the
+    // primary manager, so browserBacked was always false at that point. With
+    // empty credentials the binding then came back null — and the mode this
+    // cache helps most was the one mode that never got one.
+    const p = createSessionCache(
+      base({ username: null, password: null, browserBacked: true }),
+    );
+    expect(p).not.toBeNull();
+  });
+
+  it('still refuses when neither credentials nor the bridge are in play', () => {
+    expect(createSessionCache(base({ username: null, password: null }))).toBeNull();
+  });
+});
