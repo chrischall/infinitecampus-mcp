@@ -94,26 +94,6 @@ describe('createSessionCache', () => {
     expect(createSessionCache(base({ username: '  Parent@Example.COM ' }))!.load()).not.toBeNull();
   });
 
-  it('caches in fetchproxy mode, where credentials are empty by design', () => {
-    // Worth caching MORE there, not less: this mode cannot re-login unaided, so
-    // a cached session is what lets a cold start proceed with no browser.
-    const p = createSessionCache(
-      base({ username: null, password: null, browserBacked: true }),
-    );
-    expect(p).not.toBeNull();
-    p!.save(record());
-    expect(
-      createSessionCache(base({ username: null, password: null, browserBacked: true }))!.load(),
-    ).not.toBeNull();
-  });
-
-  it('does not reuse a password-minted session in fetchproxy mode', () => {
-    createSessionCache(base())!.save(record());
-    expect(
-      createSessionCache(base({ username: null, password: null, browserBacked: true }))!.load(),
-    ).toBeNull();
-  });
-
   it.each([
     ['IC_SESSION_CACHE=false', base({ env: { MCP_DATA_DIR: dir, IC_SESSION_CACHE: 'false' } })],
     ['no credentials and no bridge', base({ username: null, password: null })],
@@ -181,16 +161,14 @@ describe('cache disabled writes nothing', () => {
   });
 });
 
-describe('fetchproxy mode actually gets a cache', () => {
-  it('binds in browserBacked mode even though credentials are empty', () => {
-    // The bug this pins: the client set fetchproxyMode AFTER building the
-    // primary manager, so browserBacked was always false at that point. With
-    // empty credentials the binding then came back null — and the mode this
-    // cache helps most was the one mode that never got one.
-    const p = createSessionCache(
-      base({ username: null, password: null, browserBacked: true }),
-    );
-    expect(p).not.toBeNull();
+describe('fetchproxy mode declines to cache', () => {
+  it('returns null in browserBacked mode, even with credentials present', () => {
+    // Not an oversight. There is no identity to bind a fetchproxy record to —
+    // credentials are empty by design and the identity lives in the browser —
+    // so a restored session could belong to a DIFFERENT IC account at the same
+    // instance, and the server would act as the wrong parent.
+    expect(createSessionCache(base({ username: null, password: null, browserBacked: true }))).toBeNull();
+    expect(createSessionCache(base({ browserBacked: true }))).toBeNull();
   });
 
   it('still refuses when neither credentials nor the bridge are in play', () => {

@@ -59,9 +59,11 @@ state:
     without a persistent $HOME every cold start mints a fresh identity and
     re-prompts pairing in the browser, and the API refuses bridge without it.
     The primary district's session is also cached at
-    $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json (0600), which
-    matters most on that same path: this mode cannot re-login unaided, so a
-    cached session is what lets a cold start proceed with no browser present.
+    $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json (0600) when
+    credentials are configured, so a restart reuses it instead of logging in
+    again. Fetchproxy sessions are deliberately NOT cached: they carry no
+    identity to bind a record to, so a restored one could belong to a different
+    IC account at the same instance.
 # egress: intentionally NOT declared.
 #
 # This server's upstream host is per-deployment, so no fixed allowlist can

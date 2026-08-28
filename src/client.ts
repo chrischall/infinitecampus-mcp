@@ -405,10 +405,24 @@ export class ICClient {
         `${account.baseUrl}/campus/api/campus/authentication/cups/linkedAccounts`,
         { headers: baseHeaders },
       );
-      if (!laRes.ok) return; // transient or no CUPS — leave the latch alone so it retries
-      // The endpoint answered, so discovery genuinely ran for this session: a
-      // district with no linked accounts is a real, permanent answer.
-      this.discoveryDone = true;
+      if (!laRes.ok) {
+        // A 401/403 here does not mean "no CUPS" — it means the session this
+        // probe used is dead. Leaving it in place was the half-fix: the latch
+        // was gone, but `lastDiscoverySession` then blocked every retry, so
+        // linked districts stayed invisible and request('<linked>') threw
+        // UnknownDistrictError until some unrelated primary call happened to
+        // 401. Dropping the session is what makes the retry real — the next
+        // ensure() mints a fresh one and discovery runs against that.
+        if (laRes.status === 401 || laRes.status === 403) {
+          // Invalidate ONLY. `lastDiscoverySession` deliberately keeps pointing
+          // at this dead session: it stops ensureDiscovery re-probing the same
+          // one immediately (two requests for one answer), while the
+          // invalidation guarantees the NEXT call mints a different session
+          // object — which the guard then lets through as a genuine retry.
+          this.managers.get(account.name)?.invalidate();
+        }
+        return; // any other failure: no CUPS here, or transient. Retry later.
+      }
       const laData = await laRes.json() as { accounts: LinkedAccount[] };
       if (!laData.accounts?.length) return;
 
@@ -487,8 +501,18 @@ export class ICClient {
           console.error(`[ic] CUPS flow failed for ${linked.districtName}: ${e instanceof Error ? e.message : e}`);
         }
       }
+      // Latched HERE, at the end of a run that got all the way through, rather
+      // than at the first probe. Everything between — originalDistrict,
+      // districts/current, the per-linked switch loop — can fail transiently,
+      // and latching early wrote linked districts off permanently on any of
+      // them. A per-district CUPS failure inside the loop is caught and logged
+      // above, so it does not block the latch: that one district is genuinely
+      // unavailable, the rest were established.
+      this.discoveryDone = true;
     } catch (e) {
-      // Don't fail primary login on linked-district errors
+      // Don't fail primary login on linked-district errors, and do NOT latch —
+      // an exception here means discovery did not complete, so a later call
+      // with a live session should try again.
       console.error(`[ic] Linked district discovery failed: ${e instanceof Error ? e.message : e}`);
     }
   }

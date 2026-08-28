@@ -71,10 +71,9 @@ export interface SessionCacheOptions {
  * primary is what makes the expensive part free; discovery re-runs from the
  * restored session and re-establishes the rest.
  *
- * In fetchproxy mode the credentials are empty by design and the session comes
- * from a signed-in browser tab. That is worth caching MORE, not less: a cached
- * session lets a cold start proceed with no browser present, and this mode
- * cannot re-login unaided when it lapses.
+ * Fetchproxy mode deliberately does NOT cache — see the note in the body. It
+ * would benefit most, and there is no identity to bind a record to, so a cached
+ * session could be restored for the wrong account.
  */
 export function createSessionCache(
   opts: SessionCacheOptions,
@@ -84,12 +83,24 @@ export function createSessionCache(
 
   const username = opts.username ?? readEnvVar('IC_USERNAME', { env });
   const password = opts.password ?? readEnvVar('IC_PASSWORD', { env });
+  // Fetchproxy mode does NOT cache, and the reasoning is worth keeping.
+  //
+  // The previous review was right that it would benefit most — that mode cannot
+  // re-login unaided, so a cached session is what lets a cold start proceed with
+  // no browser. But there is nothing to bind a record to: the credentials are
+  // empty by design and the identity lives in the browser, known only after a
+  // lift. Binding to ['fetchproxy', baseUrl] means signing into a DIFFERENT IC
+  // account at the same instance restores the previous account's session, and
+  // the server then acts as the wrong parent against another family's student
+  // data. That is a worse outcome than a browser round-trip, so this declines.
+  //
+  // Making it safe needs an identity check on restore, which is a network call
+  // the sync load() path cannot make — a separate change, not a tweak here.
+  if (opts.browserBacked === true) return null;
   const boundTo =
     username && password
       ? ['login', opts.baseUrl, username.trim().toLowerCase(), password].join('\u0000')
-      : opts.browserBacked === true
-        ? ['fetchproxy', opts.baseUrl].join('\u0000')
-        : null;
+      : null;
   if (boundTo === null) return null;
 
   return createFileStatePersistence<PersistedCookieSession<StoredICSession>>({

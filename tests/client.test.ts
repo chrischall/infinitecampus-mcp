@@ -1915,22 +1915,16 @@ describe('ICClient discovery latch', () => {
     await client.ensureDiscovery();
     expect(cupsAttempts).toBe(1);
 
-    // The latch is NOT set, so linked districts are still unknown rather than
-    // permanently written off. Repeating the call does not re-probe the SAME
-    // dead session — that would fail identically for a second request. The real
-    // retry comes with a new session: login() runs discovery on every mint, and
-    // the first request through the dead session invalidates and re-mints.
-    await client.ensureDiscovery();
-    expect(cupsAttempts).toBe(1);
-    expect(client.listDistricts()).toHaveLength(1);
-
-    // A successful probe DOES latch, and stops re-probing thereafter.
+    // A 401 from the probe means the SESSION is dead, not that CUPS is absent —
+    // so the session is dropped and the next call mints a fresh one and probes
+    // again. Without that, `lastDiscoverySession` blocked every retry and linked
+    // districts stayed invisible until some unrelated call happened to 401.
     probeFails = false;
-    const fresh = new ICClient(primaryAccount);
-    await fresh.ensureDiscovery();
-    const afterOk = cupsAttempts;
-    await fresh.ensureDiscovery();
-    expect(cupsAttempts).toBe(afterOk);
+    await client.ensureDiscovery();
+    expect(cupsAttempts).toBe(2);
+    // Now it answered, so it latches and stops re-probing.
+    await client.ensureDiscovery();
+    expect(cupsAttempts).toBe(2);
   });
 
   it('coalesces concurrent callers onto one discovery', async () => {
@@ -1986,11 +1980,12 @@ describe('ICClient wiring the cache (not just the module)', () => {
     vi.unstubAllEnvs();
   });
 
-  it('fetchproxy mode gets a cache — the constructor must know the mode first', async () => {
-    // Tests the CLIENT, not createSessionCache. The module always bound
-    // correctly when told browserBacked:true; the bug was that the constructor
-    // built the manager BEFORE setting fetchproxyMode, so it was told false and
-    // fetchproxy accounts (empty credentials) got no cache at all.
+  it('fetchproxy mode writes no cache — the constructor must know the mode first', async () => {
+    // The ordering fix is still load-bearing, in the opposite direction. The
+    // original bug (fetchproxyMode set AFTER makeManager) meant browserBacked
+    // was always false — accidentally safe, since empty credentials produced a
+    // null binding anyway. With the ordering fixed the flag is honest, and the
+    // cache declines deliberately rather than by accident.
     const dir = await mkdtemp(join(tmpdir(), 'ic-fp-'));
     try {
       const file = join(dir, 'session.json');
@@ -2000,26 +1995,25 @@ describe('ICClient wiring the cache (not just the module)', () => {
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async () =>
         noLinkedAccounts()) as unknown as typeof fetch);
 
-      // An account with NO credentials, authenticated by a fetchproxy lift.
       const bridged: Account = { ...primaryAccount, username: '', password: '' };
       const client = new ICClient(bridged, {
         refreshSession: async () => ({ cookieHeader: 'JSESSIONID=lift', xsrfToken: 'x' }),
       });
       await client.ensureDiscovery();
 
-      // The whole point: a cold start in this mode should not need the browser.
+      // No file at all: a browser-derived session must not be restorable for
+      // whichever account happens to be signed in next.
       const raw = await readFile(file, 'utf8').catch(() => '');
-      expect(raw).toContain('JSESSIONID=lift');
+      expect(raw).toBe('');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it('a failed CUPS probe leaves discovery retryable on the next session', async () => {
-    // Tests the LATCH placement. With the flag set up front, a probe that 401s
-    // on a restored-but-dead session latched permanently and linked districts
-    // stayed invisible. Here the probe fails, the session is then replaced, and
-    // discovery must run again rather than having been written off.
+  it('a linked district becomes reachable after a probe failure, without an unrelated 401', async () => {
+    // The user-visible failure: ic_list_districts under-reports and
+    // request('<linked>') throws UnknownDistrictError. Previously that persisted
+    // until some other primary call happened to 401 and re-minted the session.
     vi.stubEnv('IC_SESSION_CACHE', 'false');
     let cups = 0;
     let probeFails = true;
@@ -2037,31 +2031,11 @@ describe('ICClient wiring the cache (not just the module)', () => {
 
     const client = new ICClient(primaryAccount);
     await client.ensureDiscovery();
-    expect(cups).toBe(1);
+    expect(client.listDistricts()).toHaveLength(1); // nothing discovered yet
 
-    // Replace the session the way a real expiry does — a 401 on a data request
-    // invalidates and re-logs-in — rather than reaching in with a test-only
-    // seam. login() then runs discovery against the FRESH session.
+    // No unrelated request, no manual intervention — just asking again.
     probeFails = false;
-    let dataCalls = 0;
-    fetchSpy.mockImplementation((async (url: string) => {
-      const u = String(url);
-      if (u.includes('verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=fresh' } });
-      }
-      if (u.includes('cups/linkedAccounts')) {
-        cups += 1;
-        return noLinkedAccounts();
-      }
-      dataCalls += 1;
-      return dataCalls === 1
-        ? new Response('', { status: 401 })
-        : new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
-    }) as unknown as typeof fetch);
-
-    await client.request('anoka', '/campus/api/whatever').catch(() => undefined);
-    // Latched => discovery was written off and this stays 1. Not latched => the
-    // re-login's discovery runs against the new session.
-    expect(cups).toBeGreaterThan(1);
+    await client.ensureDiscovery();
+    expect(cups).toBe(2);
   });
 });
