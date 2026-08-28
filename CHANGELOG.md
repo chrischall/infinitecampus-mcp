@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.5.0...v2.5.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **egress:** declare every host the server dials in mint.yaml ([#147](https://github.com/chrischall/infinitecampus-mcp/issues/147)) ([3db48dc](https://github.com/chrischall/infinitecampus-mcp/commit/3db48dcf2ffc76b2f879285719aa0ed148ac0ed8))
+
 ## [2.5.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.5...v2.5.0) (2026-08-28)
 
 
