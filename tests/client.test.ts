@@ -1911,18 +1911,33 @@ describe('ICClient discovery latch', () => {
       return noLinkedAccounts();
     }) as unknown as typeof fetch);
 
+    // ONE call. A 401 means the session is dead, not that CUPS is absent — so
+    // it is invalidated, a fresh one is minted, and the probe is retried within
+    // the SAME call. Recovering on the next call instead meant the first
+    // ic_list_districts after a restart silently omitted linked districts.
     const client = new ICClient(primaryAccount);
-    await client.ensureDiscovery();
-    expect(cupsAttempts).toBe(1);
+    probeFails = true;
+    let firstProbe = true;
+    fetchSpy.mockImplementation((async (url: string) => {
+      const u = String(url);
+      if (u.includes('verify.jsp')) {
+        return new Response('', { status: 200, headers: { 'set-cookie': `JSESSIONID=s${cupsAttempts}` } });
+      }
+      if (u.includes('cups/linkedAccounts')) {
+        cupsAttempts += 1;
+        if (firstProbe) {
+          firstProbe = false;
+          return new Response('', { status: 401 }); // the restored session is dead
+        }
+        return noLinkedAccounts();
+      }
+      return noLinkedAccounts();
+    }) as unknown as typeof fetch);
 
-    // A 401 from the probe means the SESSION is dead, not that CUPS is absent —
-    // so the session is dropped and the next call mints a fresh one and probes
-    // again. Without that, `lastDiscoverySession` blocked every retry and linked
-    // districts stayed invisible until some unrelated call happened to 401.
-    probeFails = false;
     await client.ensureDiscovery();
-    expect(cupsAttempts).toBe(2);
-    // Now it answered, so it latches and stops re-probing.
+    expect(cupsAttempts).toBe(2); // failed, re-minted, retried — all in one call
+
+    // The retry answered, so it latched and stops re-probing.
     await client.ensureDiscovery();
     expect(cupsAttempts).toBe(2);
   });
@@ -2024,18 +2039,77 @@ describe('ICClient wiring the cache (not just the module)', () => {
       }
       if (u.includes('cups/linkedAccounts')) {
         cups += 1;
-        return probeFails ? new Response('', { status: 401 }) : noLinkedAccounts();
+        if (probeFails) {
+          probeFails = false; // only the restored session is dead
+          return new Response('', { status: 401 });
+        }
+        return noLinkedAccounts();
       }
       return noLinkedAccounts();
     }) as unknown as typeof fetch);
 
+    // The user-visible assertion: ONE call is enough, with no unrelated request
+    // and no second attempt by the caller.
     const client = new ICClient(primaryAccount);
     await client.ensureDiscovery();
-    expect(client.listDistricts()).toHaveLength(1); // nothing discovered yet
-
-    // No unrelated request, no manual intervention — just asking again.
-    probeFails = false;
-    await client.ensureDiscovery();
     expect(cups).toBe(2);
+  });
+});
+
+describe('ICClient restored-session recovery, in one call', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  it('recovers a dead restored session without a second ensureDiscovery', async () => {
+    // The reviewer's scenario end to end, and the path the login-based tests
+    // never reach: a session restored from disk was never probed by login(), so
+    // `lastDiscoverySession` is null and the FIRST probe is the one that 401s.
+    // Before this fix the call returned empty-handed and ic_list_districts
+    // silently under-reported until something else re-minted the session.
+    const dir = await mkdtemp(join(tmpdir(), 'ic-restore-dead-'));
+    try {
+      vi.stubEnv('IC_SESSION_CACHE', 'true');
+      vi.stubEnv('IC_SESSION_FILE', join(dir, 'session.json'));
+
+      let cups = 0;
+      let restoredIsDead = false;
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+        const u = String(url);
+        if (u.includes('verify.jsp')) {
+          return new Response('', { status: 200, headers: { 'set-cookie': `JSESSIONID=live${cups}` } });
+        }
+        if (u.includes('cups/linkedAccounts')) {
+          cups += 1;
+          if (restoredIsDead) {
+            restoredIsDead = false; // only the restored session is stale
+            return new Response('', { status: 401 });
+          }
+          return noLinkedAccounts();
+        }
+        return noLinkedAccounts();
+      }) as unknown as typeof fetch);
+
+      // Seed a cache entry with a healthy login.
+      await new ICClient(primaryAccount).ensureDiscovery();
+      const seeded = cups;
+
+      // New process: restores that session, which has since gone stale.
+      restoredIsDead = true;
+      const restored = new ICClient(primaryAccount);
+      await restored.ensureDiscovery();
+
+      // Two probes inside ONE call: the dead restored session, then the freshly
+      // minted one. The caller did not have to ask twice.
+      expect(cups).toBe(seeded + 2);
+
+      // And it latched, so asking again costs nothing.
+      await restored.ensureDiscovery();
+      expect(cups).toBe(seeded + 2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

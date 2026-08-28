@@ -205,21 +205,37 @@ export class ICClient {
       await this.discoveryInFlight;
       return;
     }
-    // A completed attempt already probed with this exact session and did not
-    // latch, so probing again now would fail the same way. The genuine retry
-    // comes with a new session — login() runs discovery on every mint.
-    if (this.lastDiscoverySession === session) return;
     // Cleared on settle so a transiently-failed probe can be retried later.
-    {
-      // Non-null like every other primary lookup in this file: the constructor
-      // registers the primary account and sets primaryName from it.
-      this.discoveryInFlight = this.discoverLinkedDistricts(
-        this.accounts.get(this.primaryName)!,
-        session,
-      ).finally(() => {
-        this.discoveryInFlight = null;
-      });
-    }
+    // Non-null like every other primary lookup in this file: the constructor
+    // registers the primary account and sets primaryName from it.
+    const primary = this.accounts.get(this.primaryName)!;
+    const manager = this.managers.get(this.primaryName)!;
+    this.discoveryInFlight = (async () => {
+      // Reaching here means discovery has not latched. Both routes out are the
+      // same: get a FRESH session, because `login()` runs discovery itself on
+      // every mint — so re-minting IS the retry. Coverage made that plain, by
+      // showing the explicit re-probes this once had were unreachable: the
+      // latch was always already set by login's own discovery.
+      if (this.lastDiscoverySession === session) {
+        // Already probed this exact session and it did not latch, so it is
+        // spent. A re-mint (after the failed probe invalidated it) runs
+        // discovery against the new one.
+        await manager.ensure();
+        return;
+      }
+
+      if (await this.discoverLinkedDistricts(primary, session)) return;
+
+      // The probe rejected that session, so it has just been invalidated.
+      // Re-minting here rather than on the NEXT call is the whole point: before
+      // this, the first ic_list_districts after a restart silently omitted
+      // linked districts and the first request('<linked>') threw
+      // UnknownDistrictError. Once — login's discovery either succeeds or the
+      // problem is not staleness.
+      await manager.ensure();
+    })().finally(() => {
+      this.discoveryInFlight = null;
+    });
     await this.discoveryInFlight;
   }
 
@@ -382,7 +398,13 @@ export class ICClient {
     return session;
   }
 
-  private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<void> {
+  /**
+   * @returns whether the CUPS probe ANSWERED. `false` means the session was
+   * rejected (and has been invalidated), so the caller can mint a fresh one and
+   * try once more — without that, recovery lands a call too late and the first
+   * `ic_list_districts` after a restart silently omits linked districts.
+   */
+  private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<boolean> {
     this.lastDiscoverySession = session;
     // The latch is set where the CUPS probe ANSWERS, not here. Setting it up
     // front conflated two very different silences: "this district has no CUPS"
@@ -420,18 +442,22 @@ export class ICClient {
           // invalidation guarantees the NEXT call mints a different session
           // object — which the guard then lets through as a genuine retry.
           this.managers.get(account.name)?.invalidate();
+          return false; // dead session — the caller can retry with a fresh one
         }
-        return; // any other failure: no CUPS here, or transient. Retry later.
+        return true; // no CUPS at this district: a real, permanent answer
       }
       const laData = await laRes.json() as { accounts: LinkedAccount[] };
-      if (!laData.accounts?.length) return;
+      if (!laData.accounts?.length) {
+        this.discoveryDone = true; // a real answer: this district has no linked accounts
+        return true;
+      }
 
       // 2. Get original district info (needed for all linked accounts)
       const [origRes, currRes] = await Promise.all([
         fetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
         fetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
       ]);
-      if (!origRes.ok || !currRes.ok) return;
+      if (!origRes.ok || !currRes.ok) return true; // answered; these are transient, so no latch
       const origData = await origRes.json() as { clientID: string };
       const currData = await currRes.json() as { name: string };
 
@@ -509,11 +535,14 @@ export class ICClient {
       // above, so it does not block the latch: that one district is genuinely
       // unavailable, the rest were established.
       this.discoveryDone = true;
+      return true;
     } catch (e) {
       // Don't fail primary login on linked-district errors, and do NOT latch —
       // an exception here means discovery did not complete, so a later call
-      // with a live session should try again.
+      // with a live session should try again. Reported as "answered" so the
+      // caller does not re-mint: the session was fine, something else broke.
       console.error(`[ic] Linked district discovery failed: ${e instanceof Error ? e.message : e}`);
+      return true;
     }
   }
 
