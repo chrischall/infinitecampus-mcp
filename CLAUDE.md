@@ -28,6 +28,12 @@ src/
   config.ts            # loadAccount() — IC_* env loader over mcp-utils readEnvVar.
                        #   IC_BASE_URL+IC_DISTRICT required;
                        #   IC_USERNAME+IC_PASSWORD optional (both or neither — partial = error)
+  session-cache.ts     # createSessionCache() — the on-disk session cache for the
+                       #   PRIMARY district ($MCP_DATA_DIR/.infinitecampus-mcp/
+                       #   session-<district>.json, 0600), bound to a salted digest of
+                       #   (baseUrl, username, password). Fetchproxy mode declines: no
+                       #   identity to bind to, so a restored record could be another
+                       #   account's session at the same instance
   client.ts            # ICClient — one CookieSessionManager (mcp-utils/session) per district,
                        #   lazy single-flight login, 401 replay via withSession, CUPS
                        #   linked-district discovery, download(). Accepts preloaded cookies
@@ -65,6 +71,9 @@ IC_BASE_URL=https://campus.<district>.k12.example.us  # https only, required (bo
 IC_DISTRICT=<appName>                                 # district appName path segment, required (both auth paths)
 IC_USERNAME=<parent username>                         # optional (set with IC_PASSWORD for password login)
 IC_PASSWORD=<parent password>                         # optional (set with IC_USERNAME for password login)
+IC_SESSION_CACHE=false                                # optional. Disable the on-disk session cache (default on)
+IC_SESSION_FILE=<path>                                # optional. Cache path; defaults to
+                                                      #   $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json
 IC_NAME=<friendly name>                               # optional, defaults to IC_DISTRICT
 IC_DISABLE_FETCHPROXY=1                               # optional, "1|true|yes|on" → skip fetchproxy fallback
 ```

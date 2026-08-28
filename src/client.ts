@@ -3,6 +3,7 @@ import { dirname } from 'path';
 import { parseCookieJar } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
 import type { Account } from './config.js';
+import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
 
 /** Cookie session for one district, minted by verify.jsp or a CUPS switch. */
 interface ICSession {
@@ -53,6 +54,32 @@ export class ICClient {
    */
   private fetchproxyMode = false;
   /**
+   * Whether CUPS linked-district discovery has run IN THIS PROCESS. Not "is
+   * there a session" — a session restored from the on-disk cache is real while
+   * discovery has not run, and conflating the two leaves linked districts
+   * invisible. See {@link InfiniteCampusClient.ensureDiscovery}.
+   */
+  private discoveryDone = false;
+  /**
+   * The in-flight discovery, so concurrent callers await the SAME one.
+   *
+   * A bare boolean is not enough: `discoveryDone` flips as soon as the CUPS
+   * probe answers, but `accounts`/`linkedTo` are only populated further down.
+   * A second request for a linked district landing in that window would read
+   * the flag as done, find `accounts` still empty, and throw
+   * UnknownDistrictError for a district that was moments from existing.
+   */
+  private discoveryInFlight: Promise<void> | null = null;
+  /**
+   * The session the last discovery attempt used.
+   *
+   * `login()` runs discovery on every fresh mint. If that probe fails without
+   * latching, `ensureDiscovery` would immediately re-probe with the very same
+   * session and fail identically — two requests for one answer. Retrying is
+   * right; retrying the same session inside one call is not.
+   */
+  private lastDiscoverySession: ICSession | null = null;
+  /**
    * fetchproxy lift. Called by the primary manager's login — on the first
    * request AND on every renewal, which is what keeps the path alive past
    * JSESSIONID's idle timeout.
@@ -76,11 +103,16 @@ export class ICClient {
   ) {
     this.accounts.set(account.name, account);
     this.primaryName = account.name;
-    this.managers.set(account.name, this.makeManager(account));
+    // BEFORE makeManager: it reads `fetchproxyMode` to decide what a cached
+    // record binds to. Setting it afterwards left the primary manager built with
+    // browserBacked:false, and fetchproxy accounts carry empty credentials — so
+    // the binding came back null and the mode this cache helps MOST was the one
+    // mode that never got one.
     if (opts.refreshSession) {
       this.refreshSession = opts.refreshSession;
       this.fetchproxyMode = true;
     }
+    this.managers.set(account.name, this.makeManager(account));
   }
 
   /**
@@ -101,8 +133,26 @@ export class ICClient {
    *   bookkeeping used to provide.
    */
   private makeManager(account: Account): CookieSessionManager<ICSession> {
+    // PRIMARY ONLY. A linked district's session is seeded by the primary's
+    // discovery and has no `linkedTo` entry behind it until that runs, so a
+    // linked record restored on its own would be a session belonging to nothing.
+    // Caching the primary is what makes the expensive part free; discovery
+    // re-runs from the restored session and re-establishes the rest.
+    const cache =
+      account.name === this.primaryName
+        ? createSessionCache({
+            district: account.name,
+            baseUrl: account.baseUrl,
+            username: account.username,
+            password: account.password,
+            browserBacked: this.fetchproxyMode,
+          })
+        : null;
+
     return createCookieSessionManager<ICSession>({
       login: () => this.login(account),
+      persistence: cache ?? undefined,
+      onPersistError: reportCacheWriteFailure,
       isExpired: (res) => this.detectExpiredSession(account.name, res),
       isPermanentError: (e) => e instanceof AuthFailedError && e.permanent,
       maxAgeMs: SESSION_TTL_MS,
@@ -133,13 +183,60 @@ export class ICClient {
   }
 
   async ensureDiscovery(): Promise<void> {
-    // Ensure primary account is logged in, which triggers CUPS linked-district discovery
     const session = await this.managers.get(this.primaryName)!.ensure();
-    // Nothing further to do: `ensure()` mints the primary session when one is
-    // needed, and every primary mint runs discovery — in fetchproxy mode via
-    // login()'s lift branch, in env mode via mintSessionCookie(). A cached
-    // primary session means discovery already ran for it.
-    void session;
+    // This used to be a no-op, resting on "a cached primary session means
+    // discovery already ran for it". That held while the only cache was in
+    // memory: a session in hand implied THIS process had minted it, and every
+    // mint runs discovery. A session RESTORED from disk breaks it — the session
+    // is real, discovery never ran here, and `accounts`/`linkedTo` are empty,
+    // so linked districts would silently not exist.
+    //
+    // Tracking it explicitly is the fix, and it is the right shape regardless
+    // of persistence: the invariant is "discovery has run in this process",
+    // which is now stated rather than inferred from a side effect.
+    if (this.discoveryDone) return;
+    // ORDER MATTERS. The in-flight check comes first: a concurrent caller must
+    // AWAIT a discovery already running, not skip it — returning early would
+    // let it proceed on a half-populated `accounts` and throw
+    // UnknownDistrictError for a district that was moments from existing. The
+    // same-session guard below returns early by design, so putting it first
+    // would reintroduce exactly that race.
+    if (this.discoveryInFlight !== null) {
+      await this.discoveryInFlight;
+      return;
+    }
+    // Cleared on settle so a transiently-failed probe can be retried later.
+    // Non-null like every other primary lookup in this file: the constructor
+    // registers the primary account and sets primaryName from it.
+    const primary = this.accounts.get(this.primaryName)!;
+    const manager = this.managers.get(this.primaryName)!;
+    this.discoveryInFlight = (async () => {
+      // Reaching here means discovery has not latched. Both routes out are the
+      // same: get a FRESH session, because `login()` runs discovery itself on
+      // every mint — so re-minting IS the retry. Coverage made that plain, by
+      // showing the explicit re-probes this once had were unreachable: the
+      // latch was always already set by login's own discovery.
+      if (this.lastDiscoverySession === session) {
+        // Already probed this exact session and it did not latch, so it is
+        // spent. A re-mint (after the failed probe invalidated it) runs
+        // discovery against the new one.
+        await manager.ensure();
+        return;
+      }
+
+      if (await this.discoverLinkedDistricts(primary, session)) return;
+
+      // The probe rejected that session, so it has just been invalidated.
+      // Re-minting here rather than on the NEXT call is the whole point: before
+      // this, the first ic_list_districts after a restart silently omitted
+      // linked districts and the first request('<linked>') threw
+      // UnknownDistrictError. Once — login's discovery either succeeds or the
+      // problem is not staleness.
+      await manager.ensure();
+    })().finally(() => {
+      this.discoveryInFlight = null;
+    });
+    await this.discoveryInFlight;
   }
 
   listDistricts(): { name: string; baseUrl: string; linked: boolean }[] {
@@ -301,7 +398,20 @@ export class ICClient {
     return session;
   }
 
-  private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<void> {
+  /**
+   * @returns whether the CUPS probe ANSWERED. `false` means the session was
+   * rejected (and has been invalidated), so the caller can mint a fresh one and
+   * try once more — without that, recovery lands a call too late and the first
+   * `ic_list_districts` after a restart silently omits linked districts.
+   */
+  private async discoverLinkedDistricts(account: Account, session: ICSession): Promise<boolean> {
+    this.lastDiscoverySession = session;
+    // The latch is set where the CUPS probe ANSWERS, not here. Setting it up
+    // front conflated two very different silences: "this district has no CUPS"
+    // (permanent — never retry) and "the session was dead so the probe 401'd"
+    // (transient — must retry). A restored-but-idle-expired session hit the
+    // second, latched the flag, and left linked districts invisible for the
+    // life of the process.
     try {
       const baseHeaders = {
         Cookie: session.cookieHeader,
@@ -317,16 +427,37 @@ export class ICClient {
         `${account.baseUrl}/campus/api/campus/authentication/cups/linkedAccounts`,
         { headers: baseHeaders },
       );
-      if (!laRes.ok) return; // silently skip if endpoint doesn't exist
+      if (!laRes.ok) {
+        // A 401/403 here does not mean "no CUPS" — it means the session this
+        // probe used is dead. Leaving it in place was the half-fix: the latch
+        // was gone, but `lastDiscoverySession` then blocked every retry, so
+        // linked districts stayed invisible and request('<linked>') threw
+        // UnknownDistrictError until some unrelated primary call happened to
+        // 401. Dropping the session is what makes the retry real — the next
+        // ensure() mints a fresh one and discovery runs against that.
+        if (laRes.status === 401 || laRes.status === 403) {
+          // Invalidate ONLY. `lastDiscoverySession` deliberately keeps pointing
+          // at this dead session: it stops ensureDiscovery re-probing the same
+          // one immediately (two requests for one answer), while the
+          // invalidation guarantees the NEXT call mints a different session
+          // object — which the guard then lets through as a genuine retry.
+          this.managers.get(account.name)?.invalidate();
+          return false; // dead session — the caller can retry with a fresh one
+        }
+        return true; // no CUPS at this district: a real, permanent answer
+      }
       const laData = await laRes.json() as { accounts: LinkedAccount[] };
-      if (!laData.accounts?.length) return;
+      if (!laData.accounts?.length) {
+        this.discoveryDone = true; // a real answer: this district has no linked accounts
+        return true;
+      }
 
       // 2. Get original district info (needed for all linked accounts)
       const [origRes, currRes] = await Promise.all([
         fetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
         fetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
       ]);
-      if (!origRes.ok || !currRes.ok) return;
+      if (!origRes.ok || !currRes.ok) return true; // answered; these are transient, so no latch
       const origData = await origRes.json() as { clientID: string };
       const currData = await currRes.json() as { name: string };
 
@@ -396,9 +527,22 @@ export class ICClient {
           console.error(`[ic] CUPS flow failed for ${linked.districtName}: ${e instanceof Error ? e.message : e}`);
         }
       }
+      // Latched HERE, at the end of a run that got all the way through, rather
+      // than at the first probe. Everything between — originalDistrict,
+      // districts/current, the per-linked switch loop — can fail transiently,
+      // and latching early wrote linked districts off permanently on any of
+      // them. A per-district CUPS failure inside the loop is caught and logged
+      // above, so it does not block the latch: that one district is genuinely
+      // unavailable, the rest were established.
+      this.discoveryDone = true;
+      return true;
     } catch (e) {
-      // Don't fail primary login on linked-district errors
+      // Don't fail primary login on linked-district errors, and do NOT latch —
+      // an exception here means discovery did not complete, so a later call
+      // with a live session should try again. Reported as "answered" so the
+      // caller does not re-mint: the session was fine, something else broke.
       console.error(`[ic] Linked district discovery failed: ${e instanceof Error ? e.message : e}`);
+      return true;
     }
   }
 
