@@ -64,9 +64,32 @@ state:
     again. Fetchproxy sessions are deliberately NOT cached: they carry no
     identity to bind a record to, so a restored one could belong to a different
     IC account at the same instance.
-# egress: intentionally NOT declared.
-#
-# This server's upstream host is per-deployment, so no fixed allowlist can
-# be correct here. On the isolated tier, allow:
-#   your district's Infinite Campus host, from IC_BASE_URL (districts are each on their own host, e.g. <district>.infinitecampus.org)
-# Everything else in this file applies regardless of which host that is.
+egress:
+  allow:
+    # Only hosts the SERVER process actually fetches. Hosts that appear
+    # solely in a URL this server BUILDS and returns are excluded.
+    #
+    # Every IC call is a plain Node `fetch()` from this process against the
+    # host in IC_BASE_URL (login POST, every API read, document downloads).
+    # The fetchproxy bridge is bootstrap-only: it lifts the signed-in tab's
+    # cookies over the host's loopback bridge port and is not in the request
+    # path, so it dials nothing outbound. The IC host is PER DEPLOYMENT, so
+    # the two entries below cover the populations we know and are
+    # wildcards on purpose — the tenant is the leading label:
+    - '*.infinitecampus.org'   # Infinite Campus-hosted districts (<district>.infinitecampus.org)
+    - '*.ncsis.gov'            # North Carolina's statewide instance (<LEA>.ncsis.gov)
+    #
+    # If your IC_BASE_URL host is neither (a self-hosted district, e.g.
+    # campus.district.k12.example.us), replace these with that host.
+    # Matching is exact per label: no apex is dialled, and a district host
+    # answers directly (no www redirect observed).
+    #
+    # NOTE — this server also reaches hosts determined at RUNTIME, which
+    # cannot appear as literals here:
+    #   - each CUPS-linked district's own host, taken from the
+    #     `districtLoginUrl` the primary district's API returns (the CUPS
+    #     verify.jsp POST and every call to that district go straight there)
+    #   - fully-qualified document URLs the API returns (report cards from
+    #     ic_list_documents are downloaded from wherever they point)
+    # Confirm the concrete host(s) against a live run and add them, or the
+    # fence will block those calls while the primary district keeps working.
