@@ -1891,49 +1891,38 @@ describe('ICClient discovery latch', () => {
     vi.unstubAllEnvs();
   });
 
-  it('retries discovery when the CUPS probe failed rather than latching', async () => {
-    // A restored-but-idle-expired session makes the probe 401. Latching on that
-    // left linked districts invisible for the life of the process — a district
-    // that silently did not exist, with nothing thrown.
+  it('recovers when login\'s own discovery probe is rejected', async () => {
+    // The LOGIN path, with no cache involved (IC_SESSION_CACHE=false): the
+    // session login just minted is rejected by the CUPS probe. A 401 there means
+    // the session is dead, not that CUPS is absent — so it is invalidated, a
+    // fresh one is minted, and the probe is retried within the SAME call.
+    //
+    // The restored-session variant is covered separately below; that one is the
+    // scenario the original bug report described, and it exercises a different
+    // branch because a restored session was never probed by login().
     vi.stubEnv('IC_SESSION_CACHE', 'false');
     let cupsAttempts = 0;
-    let probeFails = true;
+    let firstProbe = true;
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
       const u = String(url);
       if (u.includes('verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=x' } });
-      }
-      if (u.includes('cups/linkedAccounts')) {
-        cupsAttempts += 1;
-        if (probeFails) return new Response('', { status: 401 });
-        return noLinkedAccounts();
-      }
-      return noLinkedAccounts();
-    }) as unknown as typeof fetch);
-
-    // ONE call. A 401 means the session is dead, not that CUPS is absent — so
-    // it is invalidated, a fresh one is minted, and the probe is retried within
-    // the SAME call. Recovering on the next call instead meant the first
-    // ic_list_districts after a restart silently omitted linked districts.
-    const client = new ICClient(primaryAccount);
-    probeFails = true;
-    let firstProbe = true;
-    fetchSpy.mockImplementation((async (url: string) => {
-      const u = String(url);
-      if (u.includes('verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': `JSESSIONID=s${cupsAttempts}` } });
+        return new Response('', {
+          status: 200,
+          headers: { 'set-cookie': `JSESSIONID=s${cupsAttempts}` },
+        });
       }
       if (u.includes('cups/linkedAccounts')) {
         cupsAttempts += 1;
         if (firstProbe) {
           firstProbe = false;
-          return new Response('', { status: 401 }); // the restored session is dead
+          return new Response('', { status: 401 });
         }
         return noLinkedAccounts();
       }
       return noLinkedAccounts();
     }) as unknown as typeof fetch);
 
+    const client = new ICClient(primaryAccount);
     await client.ensureDiscovery();
     expect(cupsAttempts).toBe(2); // failed, re-minted, retried — all in one call
 
@@ -2023,36 +2012,6 @@ describe('ICClient wiring the cache (not just the module)', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  });
-
-  it('a linked district becomes reachable after a probe failure, without an unrelated 401', async () => {
-    // The user-visible failure: ic_list_districts under-reports and
-    // request('<linked>') throws UnknownDistrictError. Previously that persisted
-    // until some other primary call happened to 401 and re-minted the session.
-    vi.stubEnv('IC_SESSION_CACHE', 'false');
-    let cups = 0;
-    let probeFails = true;
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
-      const u = String(url);
-      if (u.includes('verify.jsp')) {
-        return new Response('', { status: 200, headers: { 'set-cookie': `JSESSIONID=s${cups}` } });
-      }
-      if (u.includes('cups/linkedAccounts')) {
-        cups += 1;
-        if (probeFails) {
-          probeFails = false; // only the restored session is dead
-          return new Response('', { status: 401 });
-        }
-        return noLinkedAccounts();
-      }
-      return noLinkedAccounts();
-    }) as unknown as typeof fetch);
-
-    // The user-visible assertion: ONE call is enough, with no unrelated request
-    // and no second attempt by the caller.
-    const client = new ICClient(primaryAccount);
-    await client.ensureDiscovery();
-    expect(cups).toBe(2);
   });
 });
 
