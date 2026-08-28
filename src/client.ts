@@ -444,11 +444,16 @@ export class ICClient {
           this.managers.get(account.name)?.invalidate();
           return false; // dead session — the caller can retry with a fresh one
         }
-        return true; // no CUPS at this district: a real, permanent answer
+        // The session was fine — this is a 404 (no CUPS here) or a 5xx. Either
+        // way discovery did NOT complete, so it stays unlatched and a later
+        // call retries. `true` says only "do not re-mint the session".
+        return true;
       }
       const laData = await laRes.json() as { accounts: LinkedAccount[] };
       if (!laData.accounts?.length) {
-        this.discoveryDone = true; // a real answer: this district has no linked accounts
+        // The one genuinely permanent answer in this method: the endpoint
+        // responded and said there are no linked accounts. Latch it.
+        this.discoveryDone = true;
         return true;
       }
 
@@ -457,7 +462,10 @@ export class ICClient {
         fetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
         fetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
       ]);
-      if (!origRes.ok || !currRes.ok) return true; // answered; these are transient, so no latch
+      // Same shape as above: the session answered, so no re-mint — but
+      // discovery did not complete, so no latch either, and a later call
+      // retries.
+      if (!origRes.ok || !currRes.ok) return true;
       const origData = await origRes.json() as { clientID: string };
       const currData = await currRes.json() as { name: string };
 
