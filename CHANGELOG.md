@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.5.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.5...v2.5.0) (2026-08-28)
+
+
+### Features
+
+* cache the primary district's session so a restart skips the login ([#144](https://github.com/chrischall/infinitecampus-mcp/issues/144)) ([989a811](https://github.com/chrischall/infinitecampus-mcp/commit/989a81142deaaa8ac938e9ec298c3f0ec8aca23c))
+
+
+### Bug Fixes
+
+* match the manifest inventory's own formatting for mint.yaml ([#138](https://github.com/chrischall/infinitecampus-mcp/issues/138)) ([7e9b34a](https://github.com/chrischall/infinitecampus-mcp/commit/7e9b34ae56d3d9b822d9f480b284acd6867bfefb))
+
+
+### Documentation
+
+* make the discovery return-value comments say what the code does ([#146](https://github.com/chrischall/infinitecampus-mcp/issues/146)) ([45047a2](https://github.com/chrischall/infinitecampus-mcp/commit/45047a2a8e292068d5abb5334a8c11eb6de74f30))
+* npm test now typechecks before running vitest ([#143](https://github.com/chrischall/infinitecampus-mcp/issues/143)) ([78374b0](https://github.com/chrischall/infinitecampus-mcp/commit/78374b0e7423fc2f4904aac7f35c45b11ec18142))
+
 ## [2.4.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.4.4...v2.4.5) (2026-08-06)
 
 
