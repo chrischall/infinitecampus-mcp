@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.5.1...v2.6.0) (2026-08-29)
+
+
+### Features
+
+* **deps:** take @fetchproxy/server 2.2.0 so the concentrator can bind its sandbox address ([#149](https://github.com/chrischall/infinitecampus-mcp/issues/149)) ([0283360](https://github.com/chrischall/infinitecampus-mcp/commit/0283360d39d51ab15321782e36ff92b113932003))
+
 ## [2.5.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.5.0...v2.5.1) (2026-08-28)
 
 
