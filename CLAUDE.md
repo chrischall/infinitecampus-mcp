@@ -1,6 +1,6 @@
 # infinitecampus-mcp
 
-MCP server for Infinite Campus (Campus Parent portal). Single-account config; linked districts are auto-discovered via CUPS SSO after primary login. Stdio transport, 19 tools across academics, daily life, documents, and messaging.
+MCP server for Infinite Campus (Campus Parent portal). Single-account config; linked districts are auto-discovered via CUPS SSO after primary login. Stdio transport, 20 tools across academics, daily life, documents, messaging, and a credential/district healthcheck.
 
 ## Commands
 

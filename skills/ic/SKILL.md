@@ -5,7 +5,7 @@ description: This skill should be used when the user asks about Infinite Campus 
 
 # infinitecampus-mcp
 
-MCP server for Infinite Campus (Campus Parent portal) — 19 tools covering schedule, grades (current + recently-scored), assignments, attendance (summary + per-event), behavior, food service, documents, messages (3 sources), teachers, assessments, and fees. Linked districts are auto-discovered via CUPS SSO after primary login.
+MCP server for Infinite Campus (Campus Parent portal) — 20 tools covering schedule, grades (current + recently-scored), assignments, attendance (summary + per-event), behavior, food service, documents, messages (3 sources), teachers, assessments, and fees. Linked districts are auto-discovered via CUPS SSO after primary login.
 
 - **Source:** [github.com/chrischall/infinitecampus-mcp](https://github.com/chrischall/infinitecampus-mcp)
 - **npm:** [npmjs.com/package/infinitecampus-mcp](https://www.npmjs.com/package/infinitecampus-mcp)
@@ -89,7 +89,14 @@ mcporter call ic.<tool_name> [key=value ...] --config ~/.mcporter/mcporter.json
 
 Always pass `--config ~/.mcporter/mcporter.json` unless a local `config/mcporter.json` exists.
 
-Every tool except `ic_list_districts` takes `district` as its first arg (the district name from `ic_list_districts`). Most student-scoped tools also take `studentId` (the personID from `ic_list_students`).
+Every tool except `ic_list_districts` takes `district` as its first arg (the district name from `ic_list_districts`).
+
+`ic_healthcheck` takes no args and is the exception worth knowing: it is
+registered even when the server is unconfigured (every other tool is not), and
+it reports whether the configured `IC_DISTRICT` is one the account is actually
+LINKED to. A district you are not linked to fails every other tool for a reason
+that looks nothing like "wrong district", so run this first when things fail
+inexplicably. Most student-scoped tools also take `studentId` (the personID from `ic_list_students`).
 
 ## Tools
 

@@ -8,7 +8,7 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 
 ## Tools
 
-19 tools across academics, daily life, documents, messaging, and feature discovery.
+20 tools across academics, daily life, documents, messaging, feature discovery, and a credential/district healthcheck.
 
 | Domain | Tools |
 |---|---|

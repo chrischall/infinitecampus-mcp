@@ -18,6 +18,7 @@ import type { Account } from './config.js';
 import { resolveAuth, type ResolvedAuth } from './auth.js';
 import { ICClient } from './client.js';
 import { registerDistrictTools } from './tools/districts.js';
+import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { registerStudentTools } from './tools/students.js';
 import { registerScheduleTools } from './tools/schedule.js';
 import { registerAssignmentTools } from './tools/assignments.js';
@@ -67,9 +68,20 @@ const COMMON: Pick<RunMcpOptions, 'name' | 'version'> = {
   version: '2.6.0', // x-release-please-version
 };
 
+// Shared with the healthcheck so it can report the SAME state the tools see,
+// including on the unconfigured path where there are no tools at all.
+const healthState: {
+  account: typeof account;
+  source: typeof source;
+  configError: Error | null;
+  client: ICClient | null;
+} = { account, source, configError, client: null };
+
 if (account) {
   const client = new ICClient(account, { refreshSession });
+  healthState.client = client;
   const tools: ToolRegistrar<ICClient>[] = [
+    (server) => registerHealthcheckTools(server, healthState),
     registerDistrictTools,
     registerStudentTools,
     registerScheduleTools,
@@ -96,5 +108,13 @@ if (account) {
   const notConfigured =
     `[infinitecampus-mcp] Not configured: ${configError?.message ?? 'unknown error'}\n` +
     '[infinitecampus-mcp] Server is running with no tools registered. Set the required env vars and reinstall.';
-  await runMcp({ ...COMMON, tools: [], banner: `${notConfigured}\n${AI_NOTICE}` });
+  // NOT `tools: []` any more. A server that registers nothing explains itself
+  // only on stderr, which a hosted connector never sees — so a misconfigured
+  // server was indistinguishable from a broken one. The healthcheck is the one
+  // tool that must survive this path, because this is the path that needs it.
+  await runMcp({
+    ...COMMON,
+    tools: [(server) => registerHealthcheckTools(server, healthState)],
+    banner: `${notConfigured}\n${AI_NOTICE}`,
+  });
 }

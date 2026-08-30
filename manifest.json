@@ -132,6 +132,10 @@
     {
       "name": "ic_get_features",
       "description": "List the district's feature-flag allow-list for each of a student's enrollments"
+    },
+    {
+      "name": "ic_healthcheck",
+      "description": "Verify Infinite Campus credentials, reachability, and DISTRICT LINKAGE. Registered even when unconfigured, and flags a configured district the account is not actually linked to."
     }
   ]
 }
