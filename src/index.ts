@@ -65,7 +65,7 @@ try {
 // actionable stderr message (banner) instead of a crash loop.
 const COMMON: Pick<RunMcpOptions, 'name' | 'version'> = {
   name: 'infinitecampus',
-  version: '2.6.0', // x-release-please-version
+  version: '2.7.0', // x-release-please-version
 };
 
 // Shared with the healthcheck so it can report the SAME state the tools see,
