@@ -69,6 +69,41 @@ describe('ic_healthcheck', () => {
     expect(request).toHaveBeenCalledWith('Metrolina Regional Scholars Academy', '/campus/api/portal/students');
   });
 
+  // The `??` fallbacks: index.ts always sets configError when config fails and
+  // always sets source when it succeeds, so these are defensive — but a
+  // healthcheck that threw `undefined`, or named its source as `undefined`,
+  // would fail at the one job it exists to do.
+  it('answers when unconfigured with no stored error', async () => {
+    const { result } = await call({ account: null, source: undefined, configError: null, client: null });
+    expect(result.error?.kind).toBe('no_credential');
+    expect(result.error?.message).toMatch(/not configured/i);
+  });
+
+  it('falls back to a named source when none was recorded', async () => {
+    const client = {
+      ensureDiscovery: vi.fn(async () => {}),
+      listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: true }],
+      request: vi.fn(async () => []),
+    } as unknown as ICClient;
+    const { result } = await call({ account: ACCOUNT as never, source: undefined, configError: null, client });
+    expect(result.credential.source).toBe('env');
+    expect(result.credential.detail).toMatchObject({ auth_source: 'unknown' });
+  });
+
+  // No linked district at all: `linked_districts` must be omitted rather than
+  // reported as an empty list, and the probe falls back to the configured one.
+  it('omits linked_districts when nothing is linked, and probes the configured district', async () => {
+    const request = vi.fn(async () => []);
+    const client = {
+      ensureDiscovery: vi.fn(async () => {}),
+      listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: false }],
+      request,
+    } as unknown as ICClient;
+    const { result } = await call({ account: ACCOUNT as never, source: 'env', configError: null, client });
+    expect(result.credential.detail).not.toHaveProperty('linked_districts');
+    expect(request).toHaveBeenCalledWith('psu600cms', '/campus/api/portal/students');
+  });
+
   it('still answers when discovery cannot run', async () => {
     const client = {
       ensureDiscovery: vi.fn(async () => {
