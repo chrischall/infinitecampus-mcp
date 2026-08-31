@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.6.0...v2.7.0) (2026-08-30)
+
+
+### Features
+
+* add ic_healthcheck, and surface district linkage ([#152](https://github.com/chrischall/infinitecampus-mcp/issues/152)) ([b232cef](https://github.com/chrischall/infinitecampus-mcp/commit/b232cefab87667e5a6e7726bc39443386ed486cf))
+
 ## [2.6.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.5.1...v2.6.0) (2026-08-29)
 
 
