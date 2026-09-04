@@ -18,6 +18,32 @@ npm run test:watch   # vitest in watch mode
 
 All tools are prefixed `ic_` (e.g. `ic_list_grades`, `ic_get_schedule`). Every per-student tool takes `district` as its first arg; use `ic_list_districts` to get valid names.
 
+## Response shape (`view`)
+
+`src/view.ts` holds this server's rung vocabulary (`compact` | `full`, defaulting
+to **compact**) over `viewParam`/`resolveView`/`stripMediaUrls`/`minifiedResult`
+from `@chrischall/mcp-utils`. **All 18 read tools** (`readOnlyHint: true`) take
+`view` and answer through `viewResponse`; `ic_download_document` does not — it is
+a write (`destructiveHint`) whose response is a receipt with nothing to strip.
+
+**Compact here strips media URLs and does nothing else.** That is the whole
+projection, and the restraint is the point: this repo holds no captured Infinite
+Campus payload and no documented field list, so nothing here can honestly say
+which of IC's fields matter. A media strip is SUBTRACTIVE, so it cannot punch a
+hole in a record by failing to know about a field — the failure an invented
+field list would risk, where a half-filled record reads as a verified answer.
+When a real payload can be captured, a field projection belongs beside it.
+
+**There is no `raw` rung.** It is in the fleet vocabulary but not in `IC_VIEWS`,
+so the *schema* rejects `view: "raw"` rather than the handler silently aliasing
+it to something else. A tool must never advertise a rung it does not honour.
+
+`view` is read off `rawArgs`, never off the parsed args, and never reaches
+Infinite Campus: each handler still does `argsSchema.parse(rawArgs)` (zod strips
+unknown keys) and builds its URL from named fields. Nothing in `src/` spreads
+raw args into a request — `tests/view.test.ts` asserts it on the recorded
+`ICClient.request` calls, which is how two sibling repos leaked it.
+
 ## Architecture
 
 ```
@@ -62,7 +88,7 @@ tests/                 # vitest — mirrors src/ layout; mocks ICClient.request 
 docs/endpoints.md      # IC endpoint inventory (discovered vs. shipped)
 ```
 
-Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern: the SDK receives `argsSchema.shape`, the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path.
+Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern: the SDK receives `{ ...argsSchema.shape, view: viewArg() }` on a read tool (bare `argsSchema.shape` on a write), the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path. `view` deliberately lives outside `argsSchema`, so the parse that feeds the URL cannot see it.
 
 ## Environment
 
@@ -98,6 +124,8 @@ CUPS linked-district token-minting still happens entirely in Node — it just ne
 Tests live under `tests/` mirroring `src/`. Run with `npm test`. No real API calls — `ICClient.request` (and `ICClient.download` for `documents`) are mocked via `vi.spyOn`.
 
 `vitest.config.ts` enforces **100% lines/functions/branches/statements** on `src/**` excluding `src/index.ts` (the stdio entry point). Adding a new tool or branch requires tests to keep CI green.
+
+Most tool tests mock `server.registerTool` and call the captured handler directly — fast, and fine for a handler's own logic. **`tests/view.test.ts` does not**: it drives real tools through `createTestHarness` (`@chrischall/mcp-utils/test`) and the client RPC path, because a handler test cannot see whether a tool was WIRED. That is not a hypothetical: eventbrite-mcp shipped `viewResponse` unit-tested and green while 14 of its 26 tools never called it. The audit block at the end of that file reads the advertised `tools/list` schema and asserts the tool count (19) and that every `readOnlyHint` tool declares `view` — so a tool added without it fails the suite rather than the next caller.
 
 ## Plugin / Marketplace / Registry
 

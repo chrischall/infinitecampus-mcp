@@ -1,5 +1,4 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { minifiedResult } from '@chrischall/mcp-utils';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import { extractPlainTextFromHtml } from '@chrischall/mcp-utils/html';
@@ -126,7 +125,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     description:
       "List all parent-visible messages from three IC sources combined: (1) prism notifications (assignment alerts, grade postings, attendance alerts), (2) Messenger 2.0 inbox (teacher messages, district announcements with newMessage/actionRequired flags), and (3) portal userNotice announcements. Each section has its own count and items; if any source errors, that section contains an error field and the others still return normally. The `limit` arg caps the prism notifications only (the high-volume source). Note: listing inbox messages does not mark them as read in normal portal behavior, but some district configurations may update read-tracking; use ic_get_message for the full HTML body.",
     annotations: { readOnlyHint: true },
-    inputSchema: listArgs.shape,
+    inputSchema: { ...listArgs.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
     const limit = args.limit ?? 20;
@@ -164,7 +163,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
 
     const [notifications, inbox, announcements] = await Promise.all([prismPromise, inboxPromise, noticePromise]);
 
-    return minifiedResult({ notifications, inbox, announcements });
+    return viewResponse((rawArgs as { view?: string }).view, { notifications, inbox, announcements });
   });
 
   server.registerTool('ic_get_message', {

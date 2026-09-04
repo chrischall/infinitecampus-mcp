@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, toArray } from './_shared.js';
@@ -53,7 +53,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
   server.registerTool('ic_list_teachers', {
     description: "List a student's teachers (per enrolled section) and assigned counselor(s). Combines two endpoints (section/contacts and studentCounselor/byUser). Response field shapes may vary slightly by district — core fields (firstName, lastName, email) are consistent; additional fields are passed through.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
     const personID = encodeURIComponent(args.studentId);
@@ -79,6 +79,6 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
     const teachers = toArray(teachersRaw).map((t) => trimRecord(t));
     const counselors = toArray(counselorsRaw).map((c) => trimRecord(c));
 
-    return minifiedResult({ counselors, teachers });
+    return viewResponse((rawArgs as { view?: string }).view, { counselors, teachers });
   });
 }
