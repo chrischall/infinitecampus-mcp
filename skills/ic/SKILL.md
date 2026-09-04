@@ -103,45 +103,88 @@ inexplicably. Most student-scoped tools also take `studentId` (the personID from
 ### Districts & Students
 | Tool | Notes |
 |------|-------|
-| `ic_list_districts` | Lists configured districts (primary + any CUPS-linked). Call this first — other tools need the `district` name. |
-| `ic_list_students(district)` | Lists students (kids) attached to the portal account for a district. Use the `personID` for `studentId` on other tools. |
+| `ic_list_districts(view?)` | Lists configured districts (primary + any CUPS-linked). Call this first — other tools need the `district` name. |
+| `ic_list_students(district, view?)` | Lists students (kids) attached to the portal account for a district. Use the `personID` for `studentId` on other tools. |
 
 ### Academics
 | Tool | Notes |
 |------|-------|
-| `ic_get_schedule(district, studentId)` | Today's class schedule by default, with section placements. |
-| `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. |
-| `ic_list_grades(district, studentId, termId?)` | Term + in-progress grade summary. Omit `termId` for all terms. |
-| `ic_list_recent_grades(district, studentId, since?)` | Recently-scored assignments. Defaults to a 14-day window; pass `since` (YYYY-MM-DD) to widen. |
-| `ic_list_assessments(district, studentId)` | Standardized test scores (state/national/district tests). FeatureDisabled-aware. |
-| `ic_list_teachers(district, studentId)` | Teachers per enrolled section + assigned counselor(s). |
+| `ic_get_schedule(district, studentId, view?)` | Today's class schedule by default, with section placements. |
+| `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?, view?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. |
+| `ic_list_grades(district, studentId, termId?, view?)` | Term + in-progress grade summary. Omit `termId` for all terms. |
+| `ic_list_recent_grades(district, studentId, since?, view?)` | Recently-scored assignments. Defaults to a 14-day window; pass `since` (YYYY-MM-DD) to widen. |
+| `ic_list_assessments(district, studentId, view?)` | Standardized test scores (state/national/district tests). FeatureDisabled-aware. |
+| `ic_list_teachers(district, studentId, view?)` | Teachers per enrolled section + assigned counselor(s). |
 
 ### Daily life
 | Tool | Notes |
 |------|-------|
-| `ic_list_school_days(district, studentId)` | Instructional calendar with term boundaries. |
-| `ic_list_attendance(district, studentId, since?, until?)` | Per-course attendance summary grouped by term. |
-| `ic_list_attendance_events(district, studentId, since?, until?, excusedOnly?)` | Individual absence/tardy events with codes and human comments. |
-| `ic_list_behavior(district, studentId, since?, until?)` | Returns a `FeatureDisabled` warning if the district has no behavior module enabled — this is not an error. |
-| `ic_list_food_service(district, studentId, since?, until?)` | Lunch balance and transactions. Same `FeatureDisabled` fallback as behavior. |
-| `ic_list_fees(district, studentId)` | Fee assignments + surplus/balance. Returns `PartialSuccess` if only one endpoint works, `FeatureDisabled` if both 404. |
+| `ic_list_school_days(district, studentId, view?)` | Instructional calendar with term boundaries. |
+| `ic_list_attendance(district, studentId, since?, until?, view?)` | Per-course attendance summary grouped by term. |
+| `ic_list_attendance_events(district, studentId, since?, until?, excusedOnly?, view?)` | Individual absence/tardy events with codes and human comments. |
+| `ic_list_behavior(district, studentId, since?, until?, view?)` | Returns a `FeatureDisabled` warning if the district has no behavior module enabled — this is not an error. |
+| `ic_list_food_service(district, studentId, since?, until?, view?)` | Lunch balance and transactions. Same `FeatureDisabled` fallback as behavior. |
+| `ic_list_fees(district, studentId, view?)` | Fee assignments + surplus/balance. Returns `PartialSuccess` if only one endpoint works, `FeatureDisabled` if both 404. |
 
 ### Documents
 | Tool | Notes |
 |------|-------|
-| `ic_list_documents(district, studentId)` | Metadata only (report cards, schedules, transcripts). Each item has a `url` to pass to `ic_download_document`. Returns `FeatureDisabled` if the documents module is off. |
+| `ic_list_documents(district, studentId, view?)` | Metadata only (report cards, schedules, transcripts). Each item has a `url` to pass to `ic_download_document`. Returns `FeatureDisabled` if the documents module is off. |
 | `ic_download_document(district, url, destinationPath)` | Writes the document to `destinationPath` on disk. **`destinationPath` is required** — confirm the path with the user before calling. |
 
 ### Messaging
 | Tool | Notes |
 |------|-------|
-| `ic_list_messages(district, limit?)` | Combines three sources: **prism notifications** (grade/attendance/assignment alerts), **Messenger 2.0 inbox** (teacher messages, priority announcements like closures), and **portal userNotice** (district banners). `limit` caps prism only. Per-source `error` field if one fails. |
-| `ic_get_message(district, url)` | Fetches and parses the HTML body of an inbox message. Returns `{ subject, date, body, url }`. |
+| `ic_list_messages(district, limit?, view?)` | Combines three sources: **prism notifications** (grade/attendance/assignment alerts), **Messenger 2.0 inbox** (teacher messages, priority announcements like closures), and **portal userNotice** (district banners). `limit` caps prism only. Per-source `error` field if one fails. |
+| `ic_get_message(district, url, view?)` | Fetches and parses the HTML body of an inbox message. Returns `{ subject, date, body, url }`. |
 
 ### Features
 | Tool | Notes |
 |------|-------|
-| `ic_get_features(district, studentId)` | Raw per-enrollment `displayOptions` flags (attendance/behavior/assessment/documents/…). Useful for diagnosing why another tool returned `FeatureDisabled`. |
+| `ic_get_features(district, studentId, view?)` | Raw per-enrollment `displayOptions` flags (attendance/behavior/assessment/documents/…). Useful for diagnosing why another tool returned `FeatureDisabled`. |
+
+## Response shape (`view`)
+
+Every read tool here — 18 of the server's 20 — takes `view: "compact" | "full"`,
+and **`compact` is the default**. You get the slim shape without asking for it;
+the efficiency is not something a caller has to know to request.
+
+**What compact does here is remove pictures, and nothing else.** It drops keys
+named for an image — a student's `photo` and `thumbnailUrl`, a counselor's
+`avatar` — and any string whose value is a bare image URL even under a key the
+pattern has never heard of — a student record's `schoolLogo: ".../assets/logo.png"` goes for
+that second reason. Everything else comes back verbatim, fields nobody
+anticipated included.
+
+**It is deliberately NOT a field projection, and that is the thing to know
+before you reach for `full`.** In sibling servers compact means "the fields a
+caller acts on", so `full` buys back real content. Here it does not. This server
+hands Infinite Campus's payloads back close to verbatim and holds no verified
+record of what those payloads contain — no captured fixture, no documented field
+list — so nothing could honestly say which IC fields matter and which are noise.
+Stripping media needs no such knowledge and is purely subtractive, so it cannot
+punch a hole in a record by failing to know about a field. The consequence for
+you: `view: "full"` returns the same record with the image URLs put back, and
+nothing else. **If a field is missing from a compact response, `full` will not
+produce it** — that field was not in what Infinite Campus sent.
+
+One trim is the TOOL's, not the rung's: `ic_list_documents` reduces each
+document to `name`, `type`, `url`, `moduleLabel` and `endYear` in its handler,
+before any view is applied. `full` does not restore the rest of IC's document
+record.
+
+There is deliberately **no `raw` rung**. `full` already IS Infinite Campus's
+payload untouched, so a third value could only silently alias it. `view: "raw"`
+is rejected by the schema with an error rather than quietly answered in some
+other shape.
+
+Two tools take no `view`, both because there is nothing to project:
+
+- **`ic_download_document`** writes a PDF to disk and returns a receipt. Its
+  product IS the document — media-stripping a tool that exists to hand you a
+  file would not shrink the answer, it would empty it.
+- **`ic_healthcheck`** takes no arguments at all. Its answer is a fixed
+  credential-and-district verdict, already narrower than any projection.
 
 ## Workflows
 
