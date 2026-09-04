@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { findStudent, studentNotFound, featureDisabled, is404, toArray, checkFeatureDisabled } from './_shared.js';
@@ -34,7 +34,7 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
     description:
       "List a student's standardized test scores (state, national, district tests). Auto-resolves calendarID from each of the student's enrollments and returns one entry per enrollment. The shape of individual test records varies by district and test type — fields are passed through unchanged.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -80,6 +80,6 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
       return featureDisabled('assessments', args.district);
     }
 
-    return textResult(result);
+    return viewResponse((rawArgs as { view?: string }).view, result);
   });
 }

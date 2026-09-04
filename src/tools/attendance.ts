@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
@@ -79,7 +79,7 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
   server.registerTool('ic_list_attendance', {
     description: "List a student's absences and tardies (per-course summary grouped by term). Auto-resolves enrollmentID from the student record.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -113,7 +113,7 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
           results.push({ ...entry, terms: trimmedTerms });
         }
       }
-      return textResult(results);
+      return viewResponse((rawArgs as { view?: string }).view, results);
     } catch (e) {
       if (is404(e)) return featureDisabled('attendance', args.district);
       throw e;

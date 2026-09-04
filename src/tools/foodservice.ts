@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
@@ -17,7 +17,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
   server.registerTool('ic_list_food_service', {
     description: "List a student's lunch balance and recent food-service transactions. Returns FeatureDisabled if the district has the module turned off (detected via displayOptions or a 404 backstop).",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -34,7 +34,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
     if (args.until) params.set('endDate', args.until);
     try {
       const data = await client.request(args.district, `/campus/resources/portal/foodService?${params}`);
-      return textResult(data);
+      return viewResponse((rawArgs as { view?: string }).view, data);
     } catch (e) {
       if (is404(e)) return featureDisabled('foodService', args.district, EMPTY_FOOD);
       throw e;

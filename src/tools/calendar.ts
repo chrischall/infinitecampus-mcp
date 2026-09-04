@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { findStudent, studentNotFound, toArray } from './_shared.js';
@@ -53,7 +53,7 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
     description:
       "List a student's school days (instructional calendar) grouped by term. Returns one entry per enrollment, with term boundaries (Q1-Q4 start/end dates) and the school days inside each term — including comments like 'Teacher Workday' or 'Spring Break'. Use since/until to narrow the range.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -110,6 +110,6 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
       });
     }
 
-    return textResult(result);
+    return viewResponse((rawArgs as { view?: string }).view, result);
   });
 }
