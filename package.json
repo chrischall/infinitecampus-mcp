@@ -2,7 +2,7 @@
   "name": "infinitecampus-mcp",
   "version": "2.7.0",
   "mcpName": "io.github.chrischall/infinitecampus-mcp",
-  "description": "Infinite Campus (Campus Parent) MCP server \u2014 multi-district read + message/document write",
+  "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
     "type": "git",
