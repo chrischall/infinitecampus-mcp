@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { findStudent, studentNotFound, featureDisabled, is404, toArray, checkFeatureDisabled } from './_shared.js';
@@ -80,6 +80,6 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
       return featureDisabled('assessments', args.district);
     }
 
-    return textResult(result);
+    return minifiedResult(result);
   });
 }

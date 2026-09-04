@@ -1,14 +1,18 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import type { ICClient } from '../client.js';
 
 export function registerDistrictTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_districts', {
     description: 'List Infinite Campus districts configured for this MCP server. Returns names + base URLs (no credentials).',
+    inputSchema: {
+      view: viewArg(),
+    },
     annotations: { readOnlyHint: true },
-  }, async () => {
+  }, async ({ view }) => {
     await client.ensureDiscovery();
     const data = client.listDistricts();
-    return textResult(data);
+    return viewResponse(view, data);
   });
 }

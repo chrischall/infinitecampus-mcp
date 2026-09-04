@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
@@ -15,7 +16,7 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_behavior', {
     description: "List a student's behavior events / referrals. Returns FeatureDisabled if the district has the behavior module turned off (detected via displayOptions or a 404 backstop).",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -30,7 +31,7 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
     if (args.until) params.set('endDate', args.until);
     try {
       const data = await client.request(args.district, `/campus/resources/portal/behavior?${params}`);
-      return textResult(data);
+      return viewResponse((rawArgs as { view?: string }).view, data);
     } catch (e) {
       if (is404(e)) return featureDisabled('behavior', args.district);
       throw e;

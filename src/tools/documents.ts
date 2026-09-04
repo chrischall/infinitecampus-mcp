@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, toArray, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
@@ -37,7 +38,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_documents', {
     description: "List a student's available documents (report cards, transcripts, schedules). Returns metadata only — use ic_download_document to fetch the file. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { readOnlyHint: true },
-    inputSchema: listArgs.shape,
+    inputSchema: { ...listArgs.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
 
@@ -61,7 +62,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
         if (d.endYear !== undefined) out.endYear = d.endYear;
         return out;
       });
-      return textResult(trimmed);
+      return viewResponse((rawArgs as { view?: string }).view, trimmed);
     } catch (e) {
       if (is404(e)) return featureDisabled('documents', args.district);
       throw e;
@@ -78,10 +79,10 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
       const meta = await client.download(args.district, args.documentId, args.destinationPath, {
         overwrite: args.overwrite ?? false,
       });
-      return textResult(meta);
+      return minifiedResult(meta);
     } catch (e) {
       if (e instanceof Error && e.message.startsWith('IC download 404')) {
-        return textResult({ warning: 'FeatureDisabled', feature: 'documents', district: args.district });
+        return minifiedResult({ warning: 'FeatureDisabled', feature: 'documents', district: args.district });
       }
       throw e;
     }

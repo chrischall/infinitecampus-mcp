@@ -1,4 +1,4 @@
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ICClient } from '../client.js';
 
@@ -26,7 +26,7 @@ export function is404(e: unknown): boolean {
 
 /** Build a FeatureDisabled warning content block. */
 export function featureDisabled(feature: string, district: string, data: unknown = []) {
-  return textResult({ warning: 'FeatureDisabled', feature, district, data });
+  return minifiedResult({ warning: 'FeatureDisabled', feature, district, data });
 }
 
 /** Fetch the students list and find the one matching studentId. Returns null if not found. */
@@ -41,7 +41,7 @@ export async function findStudent(
 
 /** Standard error content block for when studentId doesn't match any student. */
 export function studentNotFound(studentId: string) {
-  return textResult({ error: 'StudentNotFound', studentId });
+  return minifiedResult({ error: 'StudentNotFound', studentId });
 }
 
 /**

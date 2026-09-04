@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 
@@ -61,7 +62,7 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
   server.registerTool('ic_list_recent_grades', {
     description: "List recently-graded assignments for a student. Server-side filtered by scoreModifiedDate. Pass since=YYYY-MM-DD to set the cutoff; defaults to 14 days ago.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
     const sinceDate = args.since ?? defaultSinceDate(new Date());
@@ -80,6 +81,6 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
       }
       return out;
     });
-    return textResult(trimmed);
+    return viewResponse((rawArgs as { view?: string }).view, trimmed);
   });
 }

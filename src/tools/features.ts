@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult } from '@chrischall/mcp-utils';
+import { minifiedResult } from '@chrischall/mcp-utils';
+import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { findStudent, studentNotFound } from './_shared.js';
@@ -21,7 +22,7 @@ export function registerFeaturesTools(server: McpServer, client: ICClient): void
     description:
       "List the district's displayOptions feature-flag allow-list for each of a student's enrollments. Each enrollment's `features` object is a map of ~90 flag names (attendance, behavior, assessment, documents, grades, schedule, etc.) to booleans. A `false` value means the district has that feature disabled for this enrollment; `true` or missing means it's available. Used internally by other tools to short-circuit disabled features, but exposed here so the LLM can answer capability questions directly.",
     annotations: { readOnlyHint: true },
-    inputSchema: argsSchema.shape,
+    inputSchema: { ...argsSchema.shape, view: viewArg() },
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 
@@ -38,6 +39,6 @@ export function registerFeaturesTools(server: McpServer, client: ICClient): void
         features,
       });
     }
-    return textResult(result);
+    return viewResponse((rawArgs as { view?: string }).view, result);
   });
 }

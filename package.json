@@ -2,7 +2,7 @@
   "name": "infinitecampus-mcp",
   "version": "2.7.0",
   "mcpName": "io.github.chrischall/infinitecampus-mcp",
-  "description": "Infinite Campus (Campus Parent) MCP server — multi-district read + message/document write",
+  "description": "Infinite Campus (Campus Parent) MCP server \u2014 multi-district read + message/document write",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
     "type": "git",
@@ -45,7 +45,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^0.19.2",
+    "@chrischall/mcp-utils": "^0.23.0",
     "@fetchproxy/bootstrap": "^2.2.0",
     "@fetchproxy/server": "^2.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
