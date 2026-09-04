@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.7.0...v2.8.0) (2026-09-04)
+
+
+### Features
+
+* **tools:** compact by default — strip media URLs, and minify every response ([#165](https://github.com/chrischall/infinitecampus-mcp/issues/165)) ([1d6a628](https://github.com/chrischall/infinitecampus-mcp/commit/1d6a6285be5cdb0b22dce5901577f09371384805))
+
+
+### Bug Fixes
+
+* **deps:** pick up @chrischall/mcp-utils 0.23.2 ([#167](https://github.com/chrischall/infinitecampus-mcp/issues/167)) ([404fad2](https://github.com/chrischall/infinitecampus-mcp/commit/404fad2229607ef756db479bcae089c54878ccc8))
+
 ## [2.7.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.6.0...v2.7.0) (2026-08-30)
 
 
