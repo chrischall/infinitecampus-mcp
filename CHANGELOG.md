@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.0...v2.8.1) (2026-09-04)
+
+
+### Documentation
+
+* **skill:** document the `view` response-shape parameter ([#170](https://github.com/chrischall/infinitecampus-mcp/issues/170)) ([b0b3a29](https://github.com/chrischall/infinitecampus-mcp/commit/b0b3a29040b5fe081a65a607b2f6db264a1dd0fb))
+
 ## [2.8.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.7.0...v2.8.0) (2026-09-04)
 
 
