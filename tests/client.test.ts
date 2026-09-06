@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile as fsWriteFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ICClient, AuthFailedError } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
@@ -504,9 +504,12 @@ describe('ICClient.request — error paths', () => {
   });
 
   it('download throws UnknownDistrictError for unknown district', async () => {
-    const client = new ICClient(primaryAccount);
-    await expect(client.download('nope', '/x', '/tmp/foo.pdf')).rejects.toThrow(/Unknown district/);
-  });
+  const client = new ICClient(primaryAccount);
+
+  await expect(
+    client.download('nope', '/x', join(tmpdir(), 'foo.pdf')),
+  ).rejects.toThrow(/Unknown district/);
+});
 
   it('download uses octet-stream when no content-type header', async () => {
     fetchSpy
