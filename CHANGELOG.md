@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.1...v2.8.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* make build and tests cross-platform (thanks @clearlinesolutions) ([#176](https://github.com/chrischall/infinitecampus-mcp/issues/176)) ([5798fa6](https://github.com/chrischall/infinitecampus-mcp/commit/5798fa64aa324eeeadb1ed034a96cb7fe6fe8198))
+
 ## [2.8.1](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.0...v2.8.1) (2026-09-04)
 
 
