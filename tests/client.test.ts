@@ -504,12 +504,11 @@ describe('ICClient.request — error paths', () => {
   });
 
   it('download throws UnknownDistrictError for unknown district', async () => {
-  const client = new ICClient(primaryAccount);
-
-  await expect(
-    client.download('nope', '/x', join(tmpdir(), 'foo.pdf')),
-  ).rejects.toThrow(/Unknown district/);
-});
+    const client = new ICClient(primaryAccount);
+    await expect(client.download('nope', '/x', join(tmpdir(), 'foo.pdf'))).rejects.toThrow(
+      /Unknown district/,
+    );
+  });
 
   it('download uses octet-stream when no content-type header', async () => {
     fetchSpy

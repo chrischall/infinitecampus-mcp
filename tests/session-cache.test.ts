@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -78,16 +77,15 @@ describe('sessionCachePath', () => {
 
 describe('createSessionCache', () => {
   it('round-trips a session and uses 0600 permissions on POSIX', () => {
-  createSessionCache(base())!.save(record());
-
-  if (process.platform !== 'win32') {
-    expect(statSync(cacheFile(dir)).mode & 0o777).toBe(0o600);
-  }
-
-  const back = createSessionCache(base())!.load();
-  expect(back?.session.cookieHeader).toBe('JSESSIONID=abc');
-  expect(back?.session.xsrfToken).toBe('x1');
-});
+    createSessionCache(base())!.save(record());
+    // Windows has no POSIX mode bits; the round-trip below still has to hold there.
+    if (process.platform !== 'win32') {
+      expect(statSync(cacheFile(dir)).mode & 0o777).toBe(0o600);
+    }
+    const back = createSessionCache(base())!.load();
+    expect(back?.session.cookieHeader).toBe('JSESSIONID=abc');
+    expect(back?.session.xsrfToken).toBe('x1');
+  });
 
   it('keeps two districts apart instead of clobbering', () => {
     // A deployment can point at more than one IC instance; one shared file would
