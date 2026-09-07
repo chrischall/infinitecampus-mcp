@@ -34,34 +34,54 @@ const cacheFile = (d: string, district = 'springfield'): string =>
 
 describe('sessionCachePath', () => {
   it('prefers MCP_DATA_DIR, the variable mcp-host injects', () => {
-    expect(sessionCachePath({ MCP_DATA_DIR: '/data' }, 'Springfield')).toBe(
-      '/data/.infinitecampus-mcp/session-springfield.json',
+    const dataDir = join(tmpdir(), 'mcp-data');
+
+    expect(sessionCachePath({ MCP_DATA_DIR: dataDir }, 'Springfield')).toBe(
+      join(dataDir, '.infinitecampus-mcp', 'session-springfield.json'),
     );
   });
 
   it('honours an explicit IC_SESSION_FILE', () => {
-    expect(sessionCachePath({ IC_SESSION_FILE: '/tmp/x.json', MCP_DATA_DIR: '/data' }, 'd')).toBe(
-      '/tmp/x.json',
-    );
+    const sessionFile = join(tmpdir(), 'x.json');
+    const dataDir = join(tmpdir(), 'mcp-data');
+
+    expect(
+      sessionCachePath(
+        { IC_SESSION_FILE: sessionFile, MCP_DATA_DIR: dataDir },
+        'd',
+      ),
+    ).toBe(sessionFile);
   });
 
   it('ignores a sentinel override rather than making a relative ./null', () => {
-    expect(sessionCachePath({ IC_SESSION_FILE: 'null', HOME: '/home/u' }, 'd')).toBe(
-      '/home/u/.infinitecampus-mcp/session-d.json',
+    const home = join(tmpdir(), 'home-u');
+
+    expect(
+      sessionCachePath(
+        { IC_SESSION_FILE: 'null', HOME: home },
+        'd',
+      ),
+    ).toBe(
+      join(home, '.infinitecampus-mcp', 'session-d.json'),
     );
   });
 
   it('falls back to a plain name when there is no district', () => {
-    expect(sessionCachePath({ MCP_DATA_DIR: '/data' })).toBe(
-      '/data/.infinitecampus-mcp/session.json',
+    const dataDir = join(tmpdir(), 'mcp-data');
+
+    expect(sessionCachePath({ MCP_DATA_DIR: dataDir })).toBe(
+      join(dataDir, '.infinitecampus-mcp', 'session.json'),
     );
   });
 });
 
 describe('createSessionCache', () => {
-  it('round-trips a session through a 0600 file', () => {
+  it('round-trips a session and uses 0600 permissions on POSIX', () => {
     createSessionCache(base())!.save(record());
-    expect(statSync(cacheFile(dir)).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX mode bits; the round-trip below still has to hold there.
+    if (process.platform !== 'win32') {
+      expect(statSync(cacheFile(dir)).mode & 0o777).toBe(0o600);
+    }
     const back = createSessionCache(base())!.load();
     expect(back?.session.cookieHeader).toBe('JSESSIONID=abc');
     expect(back?.session.xsrfToken).toBe('x1');
