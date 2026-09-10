@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.8.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.2...v2.8.3) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.10.0 and @chrischall/mcp-utils 0.26.1 ([#186](https://github.com/chrischall/infinitecampus-mcp/issues/186)) ([dc305ef](https://github.com/chrischall/infinitecampus-mcp/commit/dc305efc01b75891d568cf48aab4939ec8c9a2a0))
+* **deps:** bump hono from 4.13.0 to 4.13.7 ([#182](https://github.com/chrischall/infinitecampus-mcp/issues/182)) ([3c8aed2](https://github.com/chrischall/infinitecampus-mcp/commit/3c8aed253887ba43f9c941b13ed3900454af4e48))
+* **deps:** declare the peer floors mcp-utils 0.26.1 requires ([#187](https://github.com/chrischall/infinitecampus-mcp/issues/187)) ([61a59c0](https://github.com/chrischall/infinitecampus-mcp/commit/61a59c07375c50f37c3c80d8f758e055471122eb))
+* register every tool when unconfigured, not just the healthcheck ([#184](https://github.com/chrischall/infinitecampus-mcp/issues/184)) ([43c0d0a](https://github.com/chrischall/infinitecampus-mcp/commit/43c0d0a12c4e9eac4de10552d5c2b0619d56859f))
+
 ## [2.8.2](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.1...v2.8.2) (2026-09-07)
 
 
