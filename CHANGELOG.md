@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.3...v2.8.4) (2026-09-11)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.11.3, so the hosted extension pin persists ([#189](https://github.com/chrischall/infinitecampus-mcp/issues/189)) ([047be89](https://github.com/chrischall/infinitecampus-mcp/commit/047be89880505cf447f6f9ea25da43fe25da33df))
+
 ## [2.8.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.2...v2.8.3) (2026-09-10)
 
 
