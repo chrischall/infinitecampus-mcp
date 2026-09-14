@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.8.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.3...v2.8.4) (2026-09-14)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.11.3, so the hosted extension pin persists ([#189](https://github.com/chrischall/infinitecampus-mcp/issues/189)) ([047be89](https://github.com/chrischall/infinitecampus-mcp/commit/047be89880505cf447f6f9ea25da43fe25da33df))
+* **deps:** @fetchproxy/server 3.0.0 — protocol v4 (forward secrecy, AAD over the frame) ([#193](https://github.com/chrischall/infinitecampus-mcp/issues/193)) ([87ab363](https://github.com/chrischall/infinitecampus-mcp/commit/87ab363ca061e6e56d8d1001375232e64f19ff77))
+* **deps:** bump the production-dependencies group with 3 updates ([2ce5aaf](https://github.com/chrischall/infinitecampus-mcp/commit/2ce5aaf39d5914dcd15a48abe749c352157a3b48))
+
 ## [2.8.3](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.2...v2.8.3) (2026-09-10)
 
 
