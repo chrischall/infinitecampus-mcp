@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.4...v2.8.5) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 3.0.1 — capped peer frames, logged load drops, atomic identity writes ([#194](https://github.com/chrischall/infinitecampus-mcp/issues/194)) ([c7814ce](https://github.com/chrischall/infinitecampus-mcp/commit/c7814ce6103382c651dfd318c6a214d285bc6205))
+
 ## [2.8.4](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.3...v2.8.4) (2026-09-14)
 
 
