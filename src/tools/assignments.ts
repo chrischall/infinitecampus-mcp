@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -38,7 +38,7 @@ export function registerAssignmentTools(server: McpServer, client: ICClient): vo
     description:
       "List a student's assignments. The IC endpoint returns the full term history (~hundreds of items); date and missing filters are applied client-side. For a single course, pass courseId (the sectionID from ic_get_schedule).",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
     // Only sectionID is accepted server-side; startDate/endDate are ignored by the IC endpoint.

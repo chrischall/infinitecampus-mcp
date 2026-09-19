@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -120,7 +120,7 @@ export function registerAttendanceEventsTools(server: McpServer, client: ICClien
   server.registerTool('ic_list_attendance_events', {
     description: "List individual attendance events (absences, tardies, early releases) for a student. Each event has a code, description, excuse reason, and optional human-readable comments. Auto-resolves enrollmentID from the student record. Use since/until to filter by date and excusedOnly to show only excused events.",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 

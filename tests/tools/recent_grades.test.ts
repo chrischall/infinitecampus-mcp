@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { ICClient } from '../../src/client.js';
 import { registerRecentGradesTools } from '../../src/tools/recent_grades.js';
 
