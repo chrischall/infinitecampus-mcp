@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.0.0...v3.1.0) (2026-09-19)
+
+
+### Features
+
+* **deps:** take mcp-utils 1.0.0, fixing server/discover ([#201](https://github.com/chrischall/infinitecampus-mcp/issues/201)) ([bf1d927](https://github.com/chrischall/infinitecampus-mcp/commit/bf1d9279851dbce8286817a9bbfff7831c392b88))
+
 ## [3.0.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.5...v3.0.0) (2026-09-19)
 
 
