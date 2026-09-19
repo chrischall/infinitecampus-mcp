@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.5...v3.0.0) (2026-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** migrate server to SDK v2 ([#197](https://github.com/chrischall/infinitecampus-mcp/issues/197))
+
+### Features
+
+* **mcp:** migrate server to SDK v2 ([#197](https://github.com/chrischall/infinitecampus-mcp/issues/197)) ([9bc7b06](https://github.com/chrischall/infinitecampus-mcp/commit/9bc7b065ef018b3fb445673f16b1f5f0d7e190a5))
+
 ## [2.8.5](https://github.com/chrischall/infinitecampus-mcp/compare/v2.8.4...v2.8.5) (2026-09-15)
 
 
