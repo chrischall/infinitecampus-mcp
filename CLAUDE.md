@@ -88,7 +88,7 @@ tests/                 # vitest — mirrors src/ layout; mocks ICClient.request 
 docs/endpoints.md      # IC endpoint inventory (discovered vs. shipped)
 ```
 
-Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern: the SDK receives `{ ...argsSchema.shape, view: viewArg() }` on a read tool (bare `argsSchema.shape` on a write), the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path. `view` deliberately lives outside `argsSchema`, so the parse that feeds the URL cannot see it.
+Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern. SDK v2 takes a zod SCHEMA as `inputSchema`, not the raw shape v1 wanted, so a read tool re-wraps: `inputSchema: z.object({ ...argsSchema.shape, view: viewArg() })`, while a write tool — which has no `view` to add — passes the const straight through (`inputSchema: downloadArgs`, src/tools/documents.ts:75). Either way the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path. `view` deliberately lives outside `argsSchema`, so the parse that feeds the URL cannot see it.
 
 ## Environment
 
