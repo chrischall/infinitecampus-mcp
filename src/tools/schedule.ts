@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -14,7 +14,7 @@ export function registerScheduleTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_get_schedule', {
     description: "Get a student's class schedule for a given date (default: today).",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
     const params = new URLSearchParams({ personID: args.studentId });

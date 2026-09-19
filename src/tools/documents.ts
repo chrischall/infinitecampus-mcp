@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { minifiedResult } from '@chrischall/mcp-utils';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
@@ -38,7 +38,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_documents', {
     description: "List a student's available documents (report cards, transcripts, schedules). Returns metadata only — use ic_download_document to fetch the file. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...listArgs.shape, view: viewArg() },
+    inputSchema: z.object({ ...listArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
 
@@ -72,7 +72,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_download_document', {
     description: "Download a student's document (PDF) to disk. documentId is the url field returned by ic_list_documents. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { destructiveHint: true },
-    inputSchema: downloadArgs.shape,
+    inputSchema: downloadArgs,
   }, async (rawArgs) => {
     const args = downloadArgs.parse(rawArgs);
     try {

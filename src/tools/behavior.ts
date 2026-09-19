@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -15,7 +15,7 @@ export function registerBehaviorTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_behavior', {
     description: "List a student's behavior events / referrals. Returns FeatureDisabled if the district has the behavior module turned off (detected via displayOptions or a 404 backstop).",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 

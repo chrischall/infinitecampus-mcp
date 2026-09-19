@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -17,7 +17,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
   server.registerTool('ic_list_food_service', {
     description: "List a student's lunch balance and recent food-service transactions. Returns FeatureDisabled if the district has the module turned off (detected via displayOptions or a 404 backstop).",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 

@@ -1,5 +1,5 @@
 import { minifiedResult } from '@chrischall/mcp-utils';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { ICClient } from '../client.js';
 
 export interface RawEnrollment {

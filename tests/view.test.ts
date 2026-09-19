@@ -9,7 +9,7 @@
 // through `client.callTool`, so the schema validation, the argument plumbing
 // and the content envelope are all the production ones.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { createTestHarness, parseToolResult } from '@chrischall/mcp-utils/test';
 import { ICClient } from '../src/client.js';
 import { registerStudentTools } from '../src/tools/students.js';

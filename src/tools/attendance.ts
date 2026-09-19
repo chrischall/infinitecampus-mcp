@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -79,7 +79,7 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
   server.registerTool('ic_list_attendance', {
     description: "List a student's absences and tardies (per-course summary grouped by term). Auto-resolves enrollmentID from the student record.",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
 

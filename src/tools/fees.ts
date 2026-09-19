@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
@@ -23,7 +23,7 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
     description:
       "List a student's fee assignments (charges owed) and running balance/surplus. Combines two endpoints: fee assignments and totalSurplus. Returns FeatureDisabled only if both endpoints 404; if only one works, returns that side with warning: 'PartialSuccess' and an issues[] explaining which endpoint failed.",
     annotations: { readOnlyHint: true },
-    inputSchema: { ...argsSchema.shape, view: viewArg() },
+    inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
     const personIDEnc = encodeURIComponent(args.studentId);
