@@ -88,7 +88,7 @@ tests/                 # vitest — mirrors src/ layout; mocks ICClient.request 
 docs/endpoints.md      # IC endpoint inventory (discovered vs. shipped)
 ```
 
-Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern: the SDK receives `{ ...argsSchema.shape, view: viewArg() }` on a read tool (bare `argsSchema.shape` on a write), the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path. `view` deliberately lives outside `argsSchema`, so the parse that feeds the URL cannot see it.
+Each `tools/*.ts` exports `register<Domain>Tools(server, client)`. Tool schemas use the `argsSchema = z.object({...})` const pattern. SDK v2 takes a zod SCHEMA as `inputSchema`, not the raw shape v1 wanted, so a read tool re-wraps: `inputSchema: z.object({ ...argsSchema.shape, view: viewArg() })`, while a write tool — which has no `view` to add — passes the const straight through (`inputSchema: downloadArgs`, src/tools/documents.ts:75). Either way the handler runs `argsSchema.parse(rawArgs)` — single source of truth that also stays safe when handlers are invoked from unit tests outside the MCP request path. `view` deliberately lives outside `argsSchema`, so the parse that feeds the URL cannot see it.
 
 ## Environment
 
@@ -130,16 +130,16 @@ Most tool tests mock `server.registerTool` and call the captured handler directl
 ## Plugin / Marketplace / Registry
 
 ```
-.claude-plugin/plugin.json       # Claude plugin manifest (skill + .mcp.json ref)
+.claude-plugin/plugin.json       # Claude Code plugin manifest (skill + .mcp.json ref)
 .claude-plugin/marketplace.json  # Marketplace catalog entry
 .mcp.json                        # Plugin-runtime MCP server config (uses ${CLAUDE_PLUGIN_ROOT})
 manifest.json                    # MCPB / DXT bundle manifest (user_config + tool catalog)
 server.json                      # modelcontextprotocol/registry entry
 mint.yaml                        # mcp-host hosting manifest (env / egress / state for registration)
-skills/ic/SKILL.md               # Codex skill — when/how to use the tools (packaged .skill file, zipped in Release workflow)
+skills/ic/SKILL.md               # Claude Code skill — when/how to use the tools (packaged .skill file, zipped in Release workflow)
 ```
 
-None of these are part of the MCP runtime — they exist for distribution (Codex plugin marketplace, MCPB, MCP Registry, ClawHub).
+None of these are part of the MCP runtime — they exist for distribution (Claude Code plugin marketplace, MCPB, MCP Registry, ClawHub).
 
 <!-- pr-workflow:v3 -->
 ## Pull requests & release notes
