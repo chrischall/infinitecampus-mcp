@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.0...v3.1.1) (2026-09-21)
+
+
+### Documentation
+
+* AGENTS.md pointed at a directory that does not exist ([#205](https://github.com/chrischall/infinitecampus-mcp/issues/205)) ([ed88992](https://github.com/chrischall/infinitecampus-mcp/commit/ed8899216268c49c874fa53bda5527a493ee9529))
+
 ## [3.1.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.0.0...v3.1.0) (2026-09-19)
 
 

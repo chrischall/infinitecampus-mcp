@@ -63,7 +63,7 @@ try {
 // avoids — see `unconfiguredClient`.
 const COMMON: Pick<RunMcpOptions, 'name' | 'version'> = {
   name: 'infinitecampus',
-  version: '3.1.0', // x-release-please-version
+  version: '3.1.1', // x-release-please-version
 };
 
 // Shared with the healthcheck so it can report the SAME state the tools see,
