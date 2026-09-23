@@ -45,9 +45,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^1.0.0",
-    "@fetchproxy/bootstrap": "^3.0.1",
-    "@fetchproxy/server": "^3.0.1",
+    "@chrischall/mcp-utils": "^2.4.0",
+    "@fetchproxy/bootstrap": "^3.2.0",
+    "@fetchproxy/server": "^3.2.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "dotenv": "^17.4.2",
     "node-html-parser": "^9.0.0",
