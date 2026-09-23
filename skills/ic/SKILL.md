@@ -109,7 +109,7 @@ inexplicably. Most student-scoped tools also take `studentId` (the personID from
 ### Academics
 | Tool | Notes |
 |------|-------|
-| `ic_get_schedule(district, studentId, view?)` | Today's class schedule by default, with section placements. |
+| `ic_get_schedule(district, studentId, view?)` | Full class roster with section placements, across every term — not filtered by date or term. |
 | `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?, view?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. |
 | `ic_list_grades(district, studentId, termId?, view?)` | Term + in-progress grade summary. Omit `termId` for all terms. |
 | `ic_list_recent_grades(district, studentId, since?, view?)` | Recently-scored assignments. Defaults to a 14-day window; pass `since` (YYYY-MM-DD) to widen. |
@@ -207,7 +207,7 @@ Two tools take no `view`, both because there is nothing to project:
 - Or `ic_list_assignments(district, studentId, since=..., until=...)` for a date window
 
 **Today's schedule:**
-- `ic_get_schedule(district, studentId)` — returns today's classes by default
+- `ic_get_schedule(district, studentId)` — returns every term's roster; pick out the current term's placements
 
 **Weather closure or priority announcement?**
 - `ic_list_messages(district)` — scan the Messenger 2.0 inbox entries for priority subjects
