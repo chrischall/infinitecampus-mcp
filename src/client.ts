@@ -1,4 +1,5 @@
-import { writeFile, lstat, realpath } from 'fs/promises';
+import { open, lstat, realpath } from 'fs/promises';
+import { constants as fsConstants } from 'fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { parseCookieJar } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
@@ -573,8 +574,9 @@ export class ICClient {
     const target = await confinedDestination(destinationPath);
     let destStat: Awaited<ReturnType<typeof lstat>> | null = null;
     try { destStat = await lstat(target.real); } catch { /* not present, ok */ }
-    // lstat, not stat: writeFile follows symlinks, so a link planted in the
-    // download dir would redirect the write anywhere — overwrite or not.
+    // lstat, not stat: a symlink here would redirect the write anywhere. This
+    // is the fail-fast check; writeConfined() re-enforces it atomically at
+    // open time, since a link can be planted while the document is fetched.
     if (destStat?.isSymbolicLink()) throw new InvalidPathError(destinationPath, 'is a symlink');
     if (destStat?.isDirectory()) throw new InvalidPathError(destinationPath);
     if (destStat && !opts.overwrite) throw new FileExistsError(destinationPath);
@@ -598,8 +600,7 @@ export class ICClient {
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
-    // 'wx' fails if something appeared at the path since the pre-flight check.
-    await writeFile(target.real, buf, { flag: opts.overwrite ? 'w' : 'wx' });
+    await writeConfined(target.real, destinationPath, buf, !!opts.overwrite);
     return {
       path: target.requested,
       bytes: buf.byteLength,
@@ -644,6 +645,36 @@ export class ICClient {
       return text as T;
     }
     return (text ? JSON.parse(text) : null) as T;
+  }
+}
+
+/**
+ * Write a download to its (already confined) destination without ever
+ * following a symlink at the final path component. The pre-flight lstat in
+ * download() is separated from this write by a network fetch, so a link can
+ * be planted in between; O_NOFOLLOW makes the open itself refuse it (ELOOP),
+ * and O_EXCL (without overwrite) refuses anything that appeared at all.
+ */
+async function writeConfined(
+  real: string, requested: string, buf: Uint8Array, overwrite: boolean,
+): Promise<void> {
+  // O_NOFOLLOW is POSIX-only: on Windows it is undefined, which `|` coerces to
+  // 0 (and creating a symlink there needs elevated rights anyway).
+  const { O_WRONLY, O_CREAT, O_TRUNC, O_EXCL, O_NOFOLLOW } = fsConstants;
+  const flags = O_WRONLY | O_CREAT | O_NOFOLLOW | (overwrite ? O_TRUNC : O_EXCL);
+  let handle;
+  try {
+    handle = await open(real, flags, 0o666);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP') throw new InvalidPathError(requested, 'is a symlink');
+    if (code === 'EEXIST') throw new FileExistsError(requested);
+    throw e;
+  }
+  try {
+    await handle.writeFile(buf);
+  } finally {
+    await handle.close();
   }
 }
 
