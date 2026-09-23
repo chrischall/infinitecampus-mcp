@@ -1,8 +1,8 @@
-import { writeFile, stat } from 'fs/promises';
-import { dirname } from 'path';
+import { writeFile, lstat, realpath } from 'fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { parseCookieJar } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
-import type { Account } from './config.js';
+import { resolveDownloadDir, type Account } from './config.js';
 import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
 
 /** Cookie session for one district, minted by verify.jsp or a CUPS switch. */
@@ -568,14 +568,16 @@ export class ICClient {
     district: string, path: string, destinationPath: string,
     opts: { overwrite?: boolean } = {},
   ): Promise<{ path: string; bytes: number; contentType: string }> {
-    // Pre-flight checks before authenticating, so we fail fast on bad paths
-    let destStat: Awaited<ReturnType<typeof stat>> | null = null;
-    try { destStat = await stat(destinationPath); } catch { /* not present, ok */ }
+    // Pre-flight checks before authenticating, so we fail fast on bad paths —
+    // and, for the confinement checks, before anything is fetched at all.
+    const target = await confinedDestination(destinationPath);
+    let destStat: Awaited<ReturnType<typeof lstat>> | null = null;
+    try { destStat = await lstat(target.real); } catch { /* not present, ok */ }
+    // lstat, not stat: writeFile follows symlinks, so a link planted in the
+    // download dir would redirect the write anywhere — overwrite or not.
+    if (destStat?.isSymbolicLink()) throw new InvalidPathError(destinationPath, 'is a symlink');
     if (destStat?.isDirectory()) throw new InvalidPathError(destinationPath);
     if (destStat && !opts.overwrite) throw new FileExistsError(destinationPath);
-
-    const parent = dirname(destinationPath);
-    try { await stat(parent); } catch { throw new ParentDirectoryMissingError(parent); }
 
     const account = await this.resolveAccount(district);
     const url = documentUrl(account, path);
@@ -596,9 +598,10 @@ export class ICClient {
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
-    await writeFile(destinationPath, buf);
+    // 'wx' fails if something appeared at the path since the pre-flight check.
+    await writeFile(target.real, buf, { flag: opts.overwrite ? 'w' : 'wx' });
     return {
-      path: destinationPath,
+      path: target.requested,
       bytes: buf.byteLength,
       contentType: res.headers.get('content-type') ?? 'application/octet-stream',
     };
@@ -642,6 +645,32 @@ export class ICClient {
     }
     return (text ? JSON.parse(text) : null) as T;
   }
+}
+
+/**
+ * Resolve a model-supplied destinationPath inside the download directory, or
+ * refuse it (fleet-audit#145).
+ *
+ * Relative paths resolve against the download dir. The containment check runs
+ * on REAL paths: the parent directory is realpath'd, so a symlinked directory
+ * inside the download dir that points elsewhere is caught, and a download dir
+ * that is itself reached through a symlink (macOS /var → /private/var) still
+ * matches. `requested` is the path as the caller named it, for the receipt.
+ */
+async function confinedDestination(destinationPath: string): Promise<{ requested: string; real: string }> {
+  const root = resolveDownloadDir();
+  let rootReal: string;
+  try { rootReal = await realpath(root); } catch { throw new DownloadDirMissingError(root); }
+  const requested = resolve(root, destinationPath);
+  const parent = dirname(requested);
+  let parentReal: string;
+  try { parentReal = await realpath(parent); } catch { throw new ParentDirectoryMissingError(parent); }
+  const real = join(parentReal, basename(requested));
+  const rel = relative(rootReal, real);
+  if (isAbsolute(rel) || rel.split(sep)[0] === '..') {
+    throw new PathOutsideDownloadDirError(destinationPath, root);
+  }
+  return { requested, real };
 }
 
 /**
@@ -754,9 +783,25 @@ export class DocumentOriginNotAllowedError extends Error {
   }
 }
 export class InvalidPathError extends Error {
-  constructor(public path: string) {
-    super(`InvalidPath: destinationPath must be a filename, not a directory: ${path}`);
+  constructor(public path: string, reason = 'is a directory') {
+    super(`InvalidPath: destinationPath must be a regular filename, but ${path} ${reason}`);
     this.name = 'InvalidPathError';
+  }
+}
+export class PathOutsideDownloadDirError extends Error {
+  constructor(public path: string, public downloadDir: string) {
+    super(
+      `PathOutsideDownloadDir: ${path} is outside the download directory ${downloadDir}. ` +
+        'Documents are only written inside it — pass a path under it (or a relative one), ' +
+        'or set IC_DOWNLOAD_DIR to change it.',
+    );
+    this.name = 'PathOutsideDownloadDirError';
+  }
+}
+export class DownloadDirMissingError extends Error {
+  constructor(public path: string) {
+    super(`DownloadDirMissing: the download directory ${path} does not exist. Create it or set IC_DOWNLOAD_DIR.`);
+    this.name = 'DownloadDirMissingError';
   }
 }
 export class ParentDirectoryMissingError extends Error {

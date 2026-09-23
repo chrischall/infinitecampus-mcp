@@ -51,6 +51,11 @@ env:
     help: >-
       Absolute path for the session cache file. Defaults to
       $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json.
+  - name: IC_DOWNLOAD_DIR
+    required: false
+    help: >-
+      Absolute path of the only directory ic_download_document may write into.
+      Defaults to ~/Downloads, which must exist.
 state:
   dataDir: true
   reason: >-

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile as fsWriteFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { ICClient, AuthFailedError } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
@@ -826,6 +826,98 @@ describe('ICClient.download', () => {
       .mockResolvedValueOnce(new Response('', { status: 401 }));
     const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/campus/doc', join(dir, 'x.pdf'))).rejects.toThrow(/Session expired/);
+  });
+
+  // SEC-2 (fleet-audit#145): destinationPath is model-controlled. Writes are
+  // confined to IC_DOWNLOAD_DIR and never follow a symlink, and every refusal
+  // happens before any request (so nothing is fetched, let alone written).
+  describe('destination confinement', () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      process.env.IC_DOWNLOAD_DIR = dir;
+      fetchSpy = vi.spyOn(globalThis, 'fetch');
+    });
+
+    function okFetches() {
+      fetchSpy
+        .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+        .mockResolvedValueOnce(noLinkedAccounts())
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), {
+          status: 200, headers: { 'content-type': 'application/pdf' },
+        }));
+    }
+
+    it.each([
+      ['an absolute path elsewhere', () => join(tmpdir(), `ic-outside-${process.pid}.pdf`)],
+      ['a ../ escape', () => join(dir, '..', 'escaped.pdf')],
+      ['the download dir\'s parent itself', () => '..'],
+      ['a relative ../ escape', () => '../escaped.pdf'],
+    ])('refuses %s without making any request', async (_label, dest) => {
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', dest())).rejects.toThrow(/PathOutsideDownloadDir/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses a symlinked parent directory that points outside', async () => {
+      const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
+      try {
+        await symlink(outside, join(dir, 'link'));
+        const client = new ICClient(primaryAccount);
+        await expect(client.download('anoka', '/x', join(dir, 'link', 'a.pdf'))).rejects.toThrow(
+          /PathOutsideDownloadDir/,
+        );
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses to write through a symlink, even with overwrite', async () => {
+      const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
+      try {
+        await fsWriteFile(join(outside, 'victim'), 'keep');
+        await symlink(join(outside, 'victim'), join(dir, 'a.pdf'));
+        const client = new ICClient(primaryAccount);
+        await expect(
+          client.download('anoka', '/x', join(dir, 'a.pdf'), { overwrite: true }),
+        ).rejects.toThrow(/InvalidPath.*symlink/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(await readFile(join(outside, 'victim'), 'utf8')).toBe('keep');
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses when the download directory does not exist', async () => {
+      process.env.IC_DOWNLOAD_DIR = join(dir, 'missing');
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', join(dir, 'missing', 'a.pdf'))).rejects.toThrow(
+        /DownloadDirMissing/,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('resolves a relative destinationPath against the download dir', async () => {
+      okFetches();
+      await mkdir(join(dir, 'kid'));
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('anoka', '/x', 'kid/report.pdf');
+      expect(meta.path).toBe(join(dir, 'kid', 'report.pdf'));
+      expect((await readFile(join(dir, 'kid', 'report.pdf'))).length).toBe(3);
+    });
+
+    it('accepts a download dir that is itself reached through a symlink', async () => {
+      okFetches();
+      const alias = join(dir, 'alias');
+      await mkdir(join(dir, 'real'));
+      await symlink(join(dir, 'real'), alias);
+      process.env.IC_DOWNLOAD_DIR = alias;
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('anoka', '/x', join(alias, 'r.pdf'));
+      expect(meta.bytes).toBe(3);
+      expect(basename(meta.path)).toBe('r.pdf');
+      expect((await readFile(join(dir, 'real', 'r.pdf'))).length).toBe(3);
+    });
   });
 
   it('throws InvalidPath when destination is a directory', async () => {
