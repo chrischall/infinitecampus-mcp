@@ -503,7 +503,11 @@ describe('ICClient.request — error paths', () => {
     }
   });
 
-  it('download throws UnknownDistrictError for unknown district', async () => {
+  it('download throws UnknownDistrictError for unknown district (after CUPS discovery)', async () => {
+    // Like request(), download() runs discovery once on a miss before giving up.
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=disc; Path=/' } }))
+      .mockResolvedValueOnce(noLinkedAccounts());
     const client = new ICClient(primaryAccount);
     await expect(client.download('nope', '/x', join(tmpdir(), 'foo.pdf'))).rejects.toThrow(
       /Unknown district/,
@@ -790,6 +794,40 @@ describe('ICClient.download', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // BUG-1 (fleet-audit#142): a stale session (restored from disk, or idled
+  // out server-side) must be invalidated, re-minted and the download replayed
+  // once — the same contract request() has via withSession.
+  it('re-logs in and replays the download once on a 401', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=stale' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=fresh' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(new Uint8Array([4, 2]), {
+        status: 200, headers: { 'content-type': 'application/pdf' },
+      }));
+    const client = new ICClient(primaryAccount);
+    const dest = join(dir, 'replayed.pdf');
+    const meta = await client.download('anoka', '/campus/doc', dest);
+    expect(meta.bytes).toBe(2);
+    const last = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    expect(((last[1] as RequestInit).headers as Record<string, string>).Cookie).toContain('JSESSIONID=fresh');
+  });
+
+  it('throws SessionExpired when the replayed download 401s again', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }));
+    const client = new ICClient(primaryAccount);
+    await expect(client.download('anoka', '/campus/doc', join(dir, 'x.pdf'))).rejects.toThrow(/Session expired/);
+  });
+
   it('throws InvalidPath when destination is a directory', async () => {
     const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/InvalidPath|destinationPath/);
@@ -906,6 +944,27 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
   }
+
+  // BUG-1 (fleet-audit#142): download() must resolve a linked district the
+  // same way request() does, or a cold-start document download for it fails.
+  it('download discovers a linked district on a cold start', async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === 'https://d2.infinitecampus.org/campus/doc.pdf') {
+        return new Response(new Uint8Array([1, 2]), { status: 200, headers: { 'content-type': 'application/pdf' } });
+      }
+      return cupsHappyPathHandler()(url, init);
+    });
+    const dir = await mkdtemp(join(tmpdir(), 'ic-linked-dl-'));
+    try {
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('district2', '/campus/doc.pdf', join(dir, 'd.pdf'));
+      expect(meta.bytes).toBe(2);
+      const dl = fetchSpy.mock.calls.find((c) => String(c[0]) === 'https://d2.infinitecampus.org/campus/doc.pdf')!;
+      expect(((dl[1] as RequestInit).headers as Record<string, string>).Cookie).toContain('JSESSIONID=linked-sess');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it('discovers and authenticates a linked district on login', async () => {
     fetchSpy.mockImplementation(cupsHappyPathHandler());

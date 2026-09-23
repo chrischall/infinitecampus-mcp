@@ -267,19 +267,29 @@ export class ICClient {
   }
 
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {
+    const account = await this.resolveAccount(district);
+    await this.managers.get(account.name)!.ensure();
+    return this.doRequest<T>(account, path, opts);
+  }
+
+  /**
+   * The account for `district`, running CUPS discovery once on a miss.
+   *
+   * Cold-start: linked districts are only added to the accounts map after
+   * primary login + CUPS discovery. If the caller asks for a linked district
+   * before any other request triggered login, we'd otherwise throw
+   * UnknownDistrictError despite the district being valid. Shared by request()
+   * and download() — download() once looked the map up directly, so a linked
+   * district's document failed on a cold start (fleet-audit#142).
+   */
+  private async resolveAccount(district: string): Promise<Account> {
     let account = this.accounts.get(district);
     if (!account) {
-      // Cold-start: linked districts are only added to the accounts map after
-      // primary login + CUPS discovery. If the caller asks for a linked
-      // district before any other request triggered login, we'd otherwise
-      // throw UnknownDistrictError despite the district being valid. Run
-      // discovery once before giving up.
       await this.ensureDiscovery();
       account = this.accounts.get(district);
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
-    await this.managers.get(account.name)!.ensure();
-    return this.doRequest<T>(account, path, opts);
+    return account;
   }
 
   private async login(account: Account): Promise<ICSession> {
@@ -567,17 +577,22 @@ export class ICClient {
     const parent = dirname(destinationPath);
     try { await stat(parent); } catch { throw new ParentDirectoryMissingError(parent); }
 
-    const account = this.accounts.get(district);
-    if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
+    const account = await this.resolveAccount(district);
     const url = documentUrl(account, path);
-    const session = await this.managers.get(account.name)!.ensure();
 
-    const res = await fetch(url, {
-      headers: {
-        Cookie: session.cookieHeader,
-        ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
-      },
-    });
+    // Same session contract as doRequest(): withSession invalidates a 401'd
+    // session (one restored from disk, or idled out server-side), re-logs in
+    // and replays exactly once. A bare ensure()+fetch left a stale session in
+    // place, so every retry 401'd until some unrelated call refreshed it.
+    const res = await this.managers.get(account.name)!.withSession(async (session) =>
+      fetch(url, {
+        headers: {
+          Cookie: session.cookieHeader,
+          ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
+        },
+      }),
+    );
+    if (res.status === 401) throw new SessionExpiredError(account.name);
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
