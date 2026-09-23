@@ -89,7 +89,7 @@ egress:
     #   - each CUPS-linked district's own host, taken from the
     #     `districtLoginUrl` the primary district's API returns (the CUPS
     #     verify.jsp POST and every call to that district go straight there)
-    #   - fully-qualified document URLs the API returns (report cards from
-    #     ic_list_documents are downloaded from wherever they point)
+    #   (fully-qualified document URLs from ic_list_documents are NOT among
+    #   them: download() only fetches https URLs on the district's own origin)
     # Confirm the concrete host(s) against a live run and add them, or the
     # fence will block those calls while the primary district keeps working.

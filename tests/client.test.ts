@@ -770,6 +770,26 @@ describe('ICClient.download', () => {
     expect(meta.bytes).toBe(3);
   });
 
+  // SEC-1 (fleet-audit#144): documentId is model-controlled, and the fetch
+  // carries the parent's live IC session. It must never leave the district's
+  // own https origin — and the refusal must come before ANY fetch, so no
+  // cookie is ever minted for, or sent to, a foreign host.
+  it.each([
+    ['a foreign https host', 'https://evil.example/r.pdf'],
+    ['plain http on the district host', 'http://anoka.infinitecampus.org/campus/doc'],
+    ['a look-alike host suffix', 'https://anoka.infinitecampus.org.evil.example/x'],
+    ['userinfo smuggling via a relative path', '@evil.example/x'],
+    ['a non-http scheme', 'file:///etc/passwd'],
+    ['an unparseable URL', 'https://bad host/x'],
+  ])('refuses %s without making any request', async (_label, documentId) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const client = new ICClient(primaryAccount);
+    await expect(client.download('anoka', documentId, join(dir, 'x.pdf'))).rejects.toThrow(
+      /DocumentOriginNotAllowed/,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('throws InvalidPath when destination is a directory', async () => {
     const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/InvalidPath|destinationPath/);

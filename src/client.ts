@@ -569,11 +569,9 @@ export class ICClient {
 
     const account = this.accounts.get(district);
     if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
+    const url = documentUrl(account, path);
     const session = await this.managers.get(account.name)!.ensure();
 
-    // Support both relative paths (/campus/...) and absolute URLs
-    // (e.g. report-card URLs from ic_list_documents come fully-qualified).
-    const url = /^https?:\/\//i.test(path) ? path : `${account.baseUrl}${path}`;
     const res = await fetch(url, {
       headers: {
         Cookie: session.cookieHeader,
@@ -629,6 +627,31 @@ export class ICClient {
     }
     return (text ? JSON.parse(text) : null) as T;
   }
+}
+
+/**
+ * Resolve a documentId to the URL download() may fetch WITH the district's
+ * session cookies — or refuse it.
+ *
+ * Both relative paths (/campus/...) and absolute URLs are accepted, because
+ * report-card URLs from ic_list_documents come fully-qualified. But documentId
+ * is model-controlled, and the text the model reads (teacher messages, district
+ * announcements) is not ours: honouring any absolute URL handed the parent's
+ * live IC session to whatever host a prompt injection named, and made the
+ * server a credentialed SSRF primitive when hosted. So the result must be https
+ * on the district's own origin, checked on the PARSED URL — a string prefix
+ * test would pass `https://<district-host>.evil.example` and, via the
+ * concatenation below, `@evil.example/x` (userinfo) too.
+ */
+function documentUrl(account: Account, path: string): string {
+  const raw = /^[a-z][a-z0-9+.-]*:/i.test(path) ? path : `${account.baseUrl}${path}`;
+  let parsed: URL | null = null;
+  try { parsed = new URL(raw); } catch { /* unparseable — refused below */ }
+  const allowed = new URL(account.baseUrl).origin;
+  if (!parsed || parsed.protocol !== 'https:' || parsed.origin !== allowed) {
+    throw new DocumentOriginNotAllowedError(path, allowed);
+  }
+  return parsed.href;
 }
 
 /**
@@ -705,6 +728,16 @@ export class SessionExpiredError extends Error {
   }
 }
 
+export class DocumentOriginNotAllowedError extends Error {
+  constructor(public documentId: string, public allowedOrigin: string) {
+    super(
+      `DocumentOriginNotAllowed: refusing to send the IC session to '${documentId}'. ` +
+        `Documents are only downloaded over https from ${allowedOrigin} — pass the url ` +
+        'field from ic_list_documents for this district.',
+    );
+    this.name = 'DocumentOriginNotAllowedError';
+  }
+}
 export class InvalidPathError extends Error {
   constructor(public path: string) {
     super(`InvalidPath: destinationPath must be a filename, not a directory: ${path}`);
