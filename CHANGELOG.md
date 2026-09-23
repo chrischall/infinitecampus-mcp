@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.1...v3.1.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **deps:** require zod ^4.6.5 to match @chrischall/mcp-utils 2.4.0 ([#210](https://github.com/chrischall/infinitecampus-mcp/issues/210)) ([6e90ed5](https://github.com/chrischall/infinitecampus-mcp/commit/6e90ed57a674a239578fed22da7ed78c21bb8a53))
+* **deps:** upgrade @chrischall/mcp-utils to 2.4.0 and @fetchproxy/* to 3.2.0 ([#208](https://github.com/chrischall/infinitecampus-mcp/issues/208)) ([b13ab8d](https://github.com/chrischall/infinitecampus-mcp/commit/b13ab8d71c3a9b7403de67b35c2a21279fdfbf56))
+
 ## [3.1.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.0...v3.1.1) (2026-09-21)
 
 
