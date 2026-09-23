@@ -888,6 +888,47 @@ describe('ICClient.download', () => {
       }
     });
 
+    it.each([
+      ['with overwrite', { overwrite: true }],
+      ['without overwrite', {}],
+    ])('refuses a symlink planted after the pre-flight check (%s)', async (_label, opts) => {
+      // The pre-flight lstat and the write are separated by a network fetch;
+      // a link that appears in that window must not redirect the write.
+      const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
+      try {
+        await fsWriteFile(join(outside, 'victim'), 'keep');
+        fetchSpy
+          .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+          .mockResolvedValueOnce(noLinkedAccounts())
+          .mockImplementationOnce(async () => {
+            await symlink(join(outside, 'victim'), join(dir, 'race.pdf'));
+            return new Response(new Uint8Array([1, 2, 3]), {
+              status: 200, headers: { 'content-type': 'application/pdf' },
+            });
+          });
+        const client = new ICClient(primaryAccount);
+        await expect(
+          client.download('anoka', '/x', join(dir, 'race.pdf'), opts),
+        ).rejects.toThrow(opts.overwrite ? /InvalidPath.*symlink/ : /FileExists/);
+        expect(await readFile(join(outside, 'victim'), 'utf8')).toBe('keep');
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('surfaces other write errors as-is (parent removed mid-fetch)', async () => {
+      await mkdir(join(dir, 'gone'));
+      fetchSpy
+        .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+        .mockResolvedValueOnce(noLinkedAccounts())
+        .mockImplementationOnce(async () => {
+          await rm(join(dir, 'gone'), { recursive: true });
+          return new Response(new Uint8Array([1]), { status: 200 });
+        });
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', join(dir, 'gone', 'a.pdf'))).rejects.toThrow(/ENOENT/);
+    });
+
     it('refuses when the download directory does not exist', async () => {
       process.env.IC_DOWNLOAD_DIR = join(dir, 'missing');
       const client = new ICClient(primaryAccount);
