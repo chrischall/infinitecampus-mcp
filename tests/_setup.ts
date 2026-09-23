@@ -27,6 +27,10 @@ const CACHE_DIR = mkdtempSync(join(tmpdir(), 'ic-test-cache-'));
 beforeEach(() => {
   process.env.IC_SESSION_CACHE = 'false';
   process.env.IC_SESSION_FILE = join(CACHE_DIR, 'session.json');
+  // ic_download_document writes only inside IC_DOWNLOAD_DIR (default
+  // ~/Downloads). Pin it to the temp root the download tests mkdtemp under, so
+  // no test can default into the developer's real Downloads folder.
+  process.env.IC_DOWNLOAD_DIR = tmpdir();
 });
 
 afterAll(() => {

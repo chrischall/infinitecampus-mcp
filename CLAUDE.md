@@ -101,6 +101,8 @@ IC_SESSION_CACHE=false                                # optional. Disable the on
 IC_SESSION_FILE=<path>                                # optional. Cache path; defaults to
                                                       #   $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json
 IC_NAME=<friendly name>                               # optional, defaults to IC_DISTRICT
+IC_DOWNLOAD_DIR=<absolute path>                       # optional. The only directory ic_download_document
+                                                      #   writes into; defaults to ~/Downloads
 IC_DISABLE_FETCHPROXY=1                               # optional, "1|true|yes|on" → skip fetchproxy fallback
 ```
 
@@ -194,5 +196,5 @@ Do NOT manually bump versions or create tags unless the user explicitly asks. re
 - **Cookie jar**: IC's login response sends ~20 Set-Cookie headers including deletion markers (`Max-Age=0`). `parseSetCookies` filters those out and dedupes by name — sending both delete and set forms (e.g. `appName=`) makes IC reject the request with "conflicting app name values".
 - **FeatureDisabled**: many districts disable modules (behavior, food service, assessments). Tools probe `checkFeatureDisabled` against the per-structure `displayOptions` allow-list first, then fall through with an `is404` backstop — both paths return `{warning: 'FeatureDisabled', feature, district, data: []}` instead of throwing.
 - **Features cache**: `getFeatures` caches per `(district, structureID)` for the session TTL — flags rarely change mid-session.
-- **`ic_download_document`** is the only write/IO tool (writes to disk). It does pre-flight checks for directory destinations, missing parent dir, and existing files (requires `overwrite: true`). Supports absolute URLs as well as relative `/campus/...` paths.
+- **`ic_download_document`** is the only write/IO tool (writes to disk). Writes are confined to `IC_DOWNLOAD_DIR` (default `~/Downloads`; relative `destinationPath`s resolve against it): the parent is realpath'd and must sit inside it, a symlinked destination is refused even with `overwrite`, and the write uses flag `wx` unless `overwrite: true` (fleet-audit#145). It also pre-flights directory destinations, a missing parent dir and existing files — all before any request. Supports absolute URLs as well as relative `/campus/...` paths, but the resolved URL must be **https on the district's own origin** — anything else is refused with `DocumentOriginNotAllowed` before any request, because the fetch carries the parent's IC session cookies and `documentId` is model-controlled (fleet-audit#144).
 - **Endpoint discovery**: paths are derived from `schwartzpub/ic_parent_api` (Python). When IC ships portal updates, check that repo first. `docs/endpoints.md` tracks every discovered endpoint and whether it's shipped.

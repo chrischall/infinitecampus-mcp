@@ -33,8 +33,8 @@ Each `enrollments[]` entry carries `enrollmentID`, `calendarID`,
 ic_get "/campus/resources/portal/roster?personID=$PID" | jq .
 ```
 
-(Only `personID` is honored server-side — no working date/term filter, even
-though the MCP tool's schema accepts `date`/`termFilter` args.)
+(Only `personID` is honored server-side — there is no date/term filter, so
+the MCP tool takes none.)
 
 ## Assignments
 

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { loadAccount } from '../src/config.js';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { loadAccount, resolveDownloadDir } from '../src/config.js';
 
 const baseEnv = {
   IC_BASE_URL: 'https://anoka.infinitecampus.org',
@@ -91,5 +93,17 @@ describe('loadAccount — env-var sanitization (readVar)', () => {
     // could pass numbers/booleans). readVar should treat as unset.
     const env = { ...baseEnv, IC_NAME: undefined } as Record<string, string | undefined>;
     expect(loadAccount(env).name).toBe(baseEnv.IC_DISTRICT);
+  });
+});
+
+describe('resolveDownloadDir', () => {
+  it('defaults to ~/Downloads', () => {
+    expect(resolveDownloadDir({})).toBe(join(homedir(), 'Downloads'));
+  });
+  it('uses IC_DOWNLOAD_DIR when set', () => {
+    expect(resolveDownloadDir({ IC_DOWNLOAD_DIR: '/srv/ic-docs' })).toBe('/srv/ic-docs');
+  });
+  it('rejects a relative IC_DOWNLOAD_DIR', () => {
+    expect(() => resolveDownloadDir({ IC_DOWNLOAD_DIR: 'docs' })).toThrow(/IC_DOWNLOAD_DIR must be an absolute path/);
   });
 });

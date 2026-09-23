@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile as fsWriteFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { ICClient, AuthFailedError } from '../src/client.js';
 import type { Account } from '../src/config.js';
 
@@ -503,7 +503,11 @@ describe('ICClient.request — error paths', () => {
     }
   });
 
-  it('download throws UnknownDistrictError for unknown district', async () => {
+  it('download throws UnknownDistrictError for unknown district (after CUPS discovery)', async () => {
+    // Like request(), download() runs discovery once on a miss before giving up.
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=disc; Path=/' } }))
+      .mockResolvedValueOnce(noLinkedAccounts());
     const client = new ICClient(primaryAccount);
     await expect(client.download('nope', '/x', join(tmpdir(), 'foo.pdf'))).rejects.toThrow(
       /Unknown district/,
@@ -770,6 +774,152 @@ describe('ICClient.download', () => {
     expect(meta.bytes).toBe(3);
   });
 
+  // SEC-1 (fleet-audit#144): documentId is model-controlled, and the fetch
+  // carries the parent's live IC session. It must never leave the district's
+  // own https origin — and the refusal must come before ANY fetch, so no
+  // cookie is ever minted for, or sent to, a foreign host.
+  it.each([
+    ['a foreign https host', 'https://evil.example/r.pdf'],
+    ['plain http on the district host', 'http://anoka.infinitecampus.org/campus/doc'],
+    ['a look-alike host suffix', 'https://anoka.infinitecampus.org.evil.example/x'],
+    ['userinfo smuggling via a relative path', '@evil.example/x'],
+    ['a non-http scheme', 'file:///etc/passwd'],
+    ['an unparseable URL', 'https://bad host/x'],
+  ])('refuses %s without making any request', async (_label, documentId) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const client = new ICClient(primaryAccount);
+    await expect(client.download('anoka', documentId, join(dir, 'x.pdf'))).rejects.toThrow(
+      /DocumentOriginNotAllowed/,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // BUG-1 (fleet-audit#142): a stale session (restored from disk, or idled
+  // out server-side) must be invalidated, re-minted and the download replayed
+  // once — the same contract request() has via withSession.
+  it('re-logs in and replays the download once on a 401', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=stale' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=fresh' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response(new Uint8Array([4, 2]), {
+        status: 200, headers: { 'content-type': 'application/pdf' },
+      }));
+    const client = new ICClient(primaryAccount);
+    const dest = join(dir, 'replayed.pdf');
+    const meta = await client.download('anoka', '/campus/doc', dest);
+    expect(meta.bytes).toBe(2);
+    const last = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
+    expect(((last[1] as RequestInit).headers as Record<string, string>).Cookie).toContain('JSESSIONID=fresh');
+  });
+
+  it('throws SessionExpired when the replayed download 401s again', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=a' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 401 }));
+    const client = new ICClient(primaryAccount);
+    await expect(client.download('anoka', '/campus/doc', join(dir, 'x.pdf'))).rejects.toThrow(/Session expired/);
+  });
+
+  // SEC-2 (fleet-audit#145): destinationPath is model-controlled. Writes are
+  // confined to IC_DOWNLOAD_DIR and never follow a symlink, and every refusal
+  // happens before any request (so nothing is fetched, let alone written).
+  describe('destination confinement', () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      process.env.IC_DOWNLOAD_DIR = dir;
+      fetchSpy = vi.spyOn(globalThis, 'fetch');
+    });
+
+    function okFetches() {
+      fetchSpy
+        .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+        .mockResolvedValueOnce(noLinkedAccounts())
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), {
+          status: 200, headers: { 'content-type': 'application/pdf' },
+        }));
+    }
+
+    it.each([
+      ['an absolute path elsewhere', () => join(tmpdir(), `ic-outside-${process.pid}.pdf`)],
+      ['a ../ escape', () => join(dir, '..', 'escaped.pdf')],
+      ['the download dir\'s parent itself', () => '..'],
+      ['a relative ../ escape', () => '../escaped.pdf'],
+    ])('refuses %s without making any request', async (_label, dest) => {
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', dest())).rejects.toThrow(/PathOutsideDownloadDir/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses a symlinked parent directory that points outside', async () => {
+      const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
+      try {
+        await symlink(outside, join(dir, 'link'));
+        const client = new ICClient(primaryAccount);
+        await expect(client.download('anoka', '/x', join(dir, 'link', 'a.pdf'))).rejects.toThrow(
+          /PathOutsideDownloadDir/,
+        );
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses to write through a symlink, even with overwrite', async () => {
+      const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
+      try {
+        await fsWriteFile(join(outside, 'victim'), 'keep');
+        await symlink(join(outside, 'victim'), join(dir, 'a.pdf'));
+        const client = new ICClient(primaryAccount);
+        await expect(
+          client.download('anoka', '/x', join(dir, 'a.pdf'), { overwrite: true }),
+        ).rejects.toThrow(/InvalidPath.*symlink/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(await readFile(join(outside, 'victim'), 'utf8')).toBe('keep');
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses when the download directory does not exist', async () => {
+      process.env.IC_DOWNLOAD_DIR = join(dir, 'missing');
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', join(dir, 'missing', 'a.pdf'))).rejects.toThrow(
+        /DownloadDirMissing/,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('resolves a relative destinationPath against the download dir', async () => {
+      okFetches();
+      await mkdir(join(dir, 'kid'));
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('anoka', '/x', 'kid/report.pdf');
+      expect(meta.path).toBe(join(dir, 'kid', 'report.pdf'));
+      expect((await readFile(join(dir, 'kid', 'report.pdf'))).length).toBe(3);
+    });
+
+    it('accepts a download dir that is itself reached through a symlink', async () => {
+      okFetches();
+      const alias = join(dir, 'alias');
+      await mkdir(join(dir, 'real'));
+      await symlink(join(dir, 'real'), alias);
+      process.env.IC_DOWNLOAD_DIR = alias;
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('anoka', '/x', join(alias, 'r.pdf'));
+      expect(meta.bytes).toBe(3);
+      expect(basename(meta.path)).toBe('r.pdf');
+      expect((await readFile(join(dir, 'real', 'r.pdf'))).length).toBe(3);
+    });
+  });
+
   it('throws InvalidPath when destination is a directory', async () => {
     const client = new ICClient(primaryAccount);
     await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/InvalidPath|destinationPath/);
@@ -886,6 +1036,27 @@ describe('ICClient — CUPS linked district discovery', () => {
       return new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
   }
+
+  // BUG-1 (fleet-audit#142): download() must resolve a linked district the
+  // same way request() does, or a cold-start document download for it fails.
+  it('download discovers a linked district on a cold start', async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === 'https://d2.infinitecampus.org/campus/doc.pdf') {
+        return new Response(new Uint8Array([1, 2]), { status: 200, headers: { 'content-type': 'application/pdf' } });
+      }
+      return cupsHappyPathHandler()(url, init);
+    });
+    const dir = await mkdtemp(join(tmpdir(), 'ic-linked-dl-'));
+    try {
+      const client = new ICClient(primaryAccount);
+      const meta = await client.download('district2', '/campus/doc.pdf', join(dir, 'd.pdf'));
+      expect(meta.bytes).toBe(2);
+      const dl = fetchSpy.mock.calls.find((c) => String(c[0]) === 'https://d2.infinitecampus.org/campus/doc.pdf')!;
+      expect(((dl[1] as RequestInit).headers as Record<string, string>).Cookie).toContain('JSESSIONID=linked-sess');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it('discovers and authenticates a linked district on login', async () => {
     fetchSpy.mockImplementation(cupsHappyPathHandler());

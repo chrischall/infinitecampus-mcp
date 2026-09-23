@@ -67,7 +67,7 @@
     },
     {
       "name": "ic_get_schedule",
-      "description": "Get a student's class schedule for a given date"
+      "description": "Get a student's class roster across every term"
     },
     {
       "name": "ic_list_assignments",

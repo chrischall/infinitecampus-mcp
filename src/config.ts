@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import { readEnvVar } from '@chrischall/mcp-utils';
 
 /**
@@ -76,4 +78,19 @@ export function loadAccount(env: Record<string, string | undefined> = process.en
     username: username ?? '',
     password: password ?? '',
   };
+}
+
+/**
+ * The one directory ic_download_document may write into: IC_DOWNLOAD_DIR, or
+ * ~/Downloads. destinationPath is model-controlled, so without a fence a
+ * prompt injection could write downloaded bytes over ~/.zshrc or into
+ * ~/.ssh/authorized_keys (fleet-audit#145). Must be absolute — a relative one
+ * would move with the process's cwd.
+ */
+export function resolveDownloadDir(env: Record<string, string | undefined> = process.env): string {
+  const dir = readVar(env, 'IC_DOWNLOAD_DIR') ?? join(homedir(), 'Downloads');
+  if (!isAbsolute(dir)) {
+    throw new Error(`IC_DOWNLOAD_DIR must be an absolute path, got: '${dir}'`);
+  }
+  return dir;
 }

@@ -30,7 +30,9 @@ const listArgs = z.object({
 const downloadArgs = z.object({
   district: z.string(),
   documentId: z.string().describe('The url field returned by ic_list_documents'),
-  destinationPath: z.string().describe('Absolute path where the PDF should be written'),
+  destinationPath: z.string().describe(
+    'Where to write the PDF. Must be inside the download directory (IC_DOWNLOAD_DIR, default ~/Downloads); a relative path resolves against it.',
+  ),
   overwrite: z.boolean().optional(),
 });
 
@@ -70,7 +72,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   });
 
   server.registerTool('ic_download_document', {
-    description: "Download a student's document (PDF) to disk. documentId is the url field returned by ic_list_documents. Returns FeatureDisabled if the district has the module turned off.",
+    description: "Download a student's document (PDF) to disk, inside the download directory (IC_DOWNLOAD_DIR, default ~/Downloads). documentId is the url field returned by ic_list_documents. Will not overwrite an existing file unless overwrite is true. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { destructiveHint: true },
     inputSchema: downloadArgs,
   }, async (rawArgs) => {

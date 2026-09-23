@@ -64,6 +64,12 @@
           "description": "Absolute path for the session cache file. Defaults to $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "IC_DOWNLOAD_DIR",
+          "description": "Absolute path of the only directory ic_download_document may write into. Defaults to ~/Downloads.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

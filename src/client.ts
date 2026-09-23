@@ -1,8 +1,8 @@
-import { writeFile, stat } from 'fs/promises';
-import { dirname } from 'path';
+import { writeFile, lstat, realpath } from 'fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 import { parseCookieJar } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
-import type { Account } from './config.js';
+import { resolveDownloadDir, type Account } from './config.js';
 import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
 
 /** Cookie session for one district, minted by verify.jsp or a CUPS switch. */
@@ -267,19 +267,29 @@ export class ICClient {
   }
 
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {
+    const account = await this.resolveAccount(district);
+    await this.managers.get(account.name)!.ensure();
+    return this.doRequest<T>(account, path, opts);
+  }
+
+  /**
+   * The account for `district`, running CUPS discovery once on a miss.
+   *
+   * Cold-start: linked districts are only added to the accounts map after
+   * primary login + CUPS discovery. If the caller asks for a linked district
+   * before any other request triggered login, we'd otherwise throw
+   * UnknownDistrictError despite the district being valid. Shared by request()
+   * and download() — download() once looked the map up directly, so a linked
+   * district's document failed on a cold start (fleet-audit#142).
+   */
+  private async resolveAccount(district: string): Promise<Account> {
     let account = this.accounts.get(district);
     if (!account) {
-      // Cold-start: linked districts are only added to the accounts map after
-      // primary login + CUPS discovery. If the caller asks for a linked
-      // district before any other request triggered login, we'd otherwise
-      // throw UnknownDistrictError despite the district being valid. Run
-      // discovery once before giving up.
       await this.ensureDiscovery();
       account = this.accounts.get(district);
       if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
     }
-    await this.managers.get(account.name)!.ensure();
-    return this.doRequest<T>(account, path, opts);
+    return account;
   }
 
   private async login(account: Account): Promise<ICSession> {
@@ -558,34 +568,40 @@ export class ICClient {
     district: string, path: string, destinationPath: string,
     opts: { overwrite?: boolean } = {},
   ): Promise<{ path: string; bytes: number; contentType: string }> {
-    // Pre-flight checks before authenticating, so we fail fast on bad paths
-    let destStat: Awaited<ReturnType<typeof stat>> | null = null;
-    try { destStat = await stat(destinationPath); } catch { /* not present, ok */ }
+    // Pre-flight checks before authenticating, so we fail fast on bad paths —
+    // and, for the confinement checks, before anything is fetched at all.
+    const target = await confinedDestination(destinationPath);
+    let destStat: Awaited<ReturnType<typeof lstat>> | null = null;
+    try { destStat = await lstat(target.real); } catch { /* not present, ok */ }
+    // lstat, not stat: writeFile follows symlinks, so a link planted in the
+    // download dir would redirect the write anywhere — overwrite or not.
+    if (destStat?.isSymbolicLink()) throw new InvalidPathError(destinationPath, 'is a symlink');
     if (destStat?.isDirectory()) throw new InvalidPathError(destinationPath);
     if (destStat && !opts.overwrite) throw new FileExistsError(destinationPath);
 
-    const parent = dirname(destinationPath);
-    try { await stat(parent); } catch { throw new ParentDirectoryMissingError(parent); }
+    const account = await this.resolveAccount(district);
+    const url = documentUrl(account, path);
 
-    const account = this.accounts.get(district);
-    if (!account) throw new UnknownDistrictError(district, [...this.accounts.keys()]);
-    const session = await this.managers.get(account.name)!.ensure();
-
-    // Support both relative paths (/campus/...) and absolute URLs
-    // (e.g. report-card URLs from ic_list_documents come fully-qualified).
-    const url = /^https?:\/\//i.test(path) ? path : `${account.baseUrl}${path}`;
-    const res = await fetch(url, {
-      headers: {
-        Cookie: session.cookieHeader,
-        ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
-      },
-    });
+    // Same session contract as doRequest(): withSession invalidates a 401'd
+    // session (one restored from disk, or idled out server-side), re-logs in
+    // and replays exactly once. A bare ensure()+fetch left a stale session in
+    // place, so every retry 401'd until some unrelated call refreshed it.
+    const res = await this.managers.get(account.name)!.withSession(async (session) =>
+      fetch(url, {
+        headers: {
+          Cookie: session.cookieHeader,
+          ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
+        },
+      }),
+    );
+    if (res.status === 401) throw new SessionExpiredError(account.name);
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
-    await writeFile(destinationPath, buf);
+    // 'wx' fails if something appeared at the path since the pre-flight check.
+    await writeFile(target.real, buf, { flag: opts.overwrite ? 'w' : 'wx' });
     return {
-      path: destinationPath,
+      path: target.requested,
       bytes: buf.byteLength,
       contentType: res.headers.get('content-type') ?? 'application/octet-stream',
     };
@@ -629,6 +645,57 @@ export class ICClient {
     }
     return (text ? JSON.parse(text) : null) as T;
   }
+}
+
+/**
+ * Resolve a model-supplied destinationPath inside the download directory, or
+ * refuse it (fleet-audit#145).
+ *
+ * Relative paths resolve against the download dir. The containment check runs
+ * on REAL paths: the parent directory is realpath'd, so a symlinked directory
+ * inside the download dir that points elsewhere is caught, and a download dir
+ * that is itself reached through a symlink (macOS /var → /private/var) still
+ * matches. `requested` is the path as the caller named it, for the receipt.
+ */
+async function confinedDestination(destinationPath: string): Promise<{ requested: string; real: string }> {
+  const root = resolveDownloadDir();
+  let rootReal: string;
+  try { rootReal = await realpath(root); } catch { throw new DownloadDirMissingError(root); }
+  const requested = resolve(root, destinationPath);
+  const parent = dirname(requested);
+  let parentReal: string;
+  try { parentReal = await realpath(parent); } catch { throw new ParentDirectoryMissingError(parent); }
+  const real = join(parentReal, basename(requested));
+  const rel = relative(rootReal, real);
+  if (isAbsolute(rel) || rel.split(sep)[0] === '..') {
+    throw new PathOutsideDownloadDirError(destinationPath, root);
+  }
+  return { requested, real };
+}
+
+/**
+ * Resolve a documentId to the URL download() may fetch WITH the district's
+ * session cookies — or refuse it.
+ *
+ * Both relative paths (/campus/...) and absolute URLs are accepted, because
+ * report-card URLs from ic_list_documents come fully-qualified. But documentId
+ * is model-controlled, and the text the model reads (teacher messages, district
+ * announcements) is not ours: honouring any absolute URL handed the parent's
+ * live IC session to whatever host a prompt injection named, and made the
+ * server a credentialed SSRF primitive when hosted. So the result must be https
+ * on the district's own origin, checked on the PARSED URL — a string prefix
+ * test would pass `https://<district-host>.evil.example` and, via the
+ * concatenation below, `@evil.example/x` (userinfo) too.
+ */
+function documentUrl(account: Account, path: string): string {
+  const raw = /^[a-z][a-z0-9+.-]*:/i.test(path) ? path : `${account.baseUrl}${path}`;
+  let parsed: URL | null = null;
+  try { parsed = new URL(raw); } catch { /* unparseable — refused below */ }
+  const allowed = new URL(account.baseUrl).origin;
+  if (!parsed || parsed.protocol !== 'https:' || parsed.origin !== allowed) {
+    throw new DocumentOriginNotAllowedError(path, allowed);
+  }
+  return parsed.href;
 }
 
 /**
@@ -705,10 +772,36 @@ export class SessionExpiredError extends Error {
   }
 }
 
+export class DocumentOriginNotAllowedError extends Error {
+  constructor(public documentId: string, public allowedOrigin: string) {
+    super(
+      `DocumentOriginNotAllowed: refusing to send the IC session to '${documentId}'. ` +
+        `Documents are only downloaded over https from ${allowedOrigin} — pass the url ` +
+        'field from ic_list_documents for this district.',
+    );
+    this.name = 'DocumentOriginNotAllowedError';
+  }
+}
 export class InvalidPathError extends Error {
-  constructor(public path: string) {
-    super(`InvalidPath: destinationPath must be a filename, not a directory: ${path}`);
+  constructor(public path: string, reason = 'is a directory') {
+    super(`InvalidPath: destinationPath must be a regular filename, but ${path} ${reason}`);
     this.name = 'InvalidPathError';
+  }
+}
+export class PathOutsideDownloadDirError extends Error {
+  constructor(public path: string, public downloadDir: string) {
+    super(
+      `PathOutsideDownloadDir: ${path} is outside the download directory ${downloadDir}. ` +
+        'Documents are only written inside it — pass a path under it (or a relative one), ' +
+        'or set IC_DOWNLOAD_DIR to change it.',
+    );
+    this.name = 'PathOutsideDownloadDirError';
+  }
+}
+export class DownloadDirMissingError extends Error {
+  constructor(public path: string) {
+    super(`DownloadDirMissing: the download directory ${path} does not exist. Create it or set IC_DOWNLOAD_DIR.`);
+    this.name = 'DownloadDirMissingError';
   }
 }
 export class ParentDirectoryMissingError extends Error {

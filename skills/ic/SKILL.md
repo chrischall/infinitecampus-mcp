@@ -109,7 +109,7 @@ inexplicably. Most student-scoped tools also take `studentId` (the personID from
 ### Academics
 | Tool | Notes |
 |------|-------|
-| `ic_get_schedule(district, studentId, view?)` | Today's class schedule by default, with section placements. |
+| `ic_get_schedule(district, studentId, view?)` | Full class roster with section placements, across every term — not filtered by date or term. |
 | `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?, view?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. |
 | `ic_list_grades(district, studentId, termId?, view?)` | Term + in-progress grade summary. Omit `termId` for all terms. |
 | `ic_list_recent_grades(district, studentId, since?, view?)` | Recently-scored assignments. Defaults to a 14-day window; pass `since` (YYYY-MM-DD) to widen. |
@@ -130,7 +130,7 @@ inexplicably. Most student-scoped tools also take `studentId` (the personID from
 | Tool | Notes |
 |------|-------|
 | `ic_list_documents(district, studentId, view?)` | Metadata only (report cards, schedules, transcripts). Each item has a `url` to pass to `ic_download_document`. Returns `FeatureDisabled` if the documents module is off. |
-| `ic_download_document(district, url, destinationPath)` | Writes the document to `destinationPath` on disk. **`destinationPath` is required** — confirm the path with the user before calling. |
+| `ic_download_document(district, url, destinationPath, overwrite?)` | Writes the document to `destinationPath`, which must be inside the download directory (`IC_DOWNLOAD_DIR`, default `~/Downloads`; relative paths resolve against it). **`destinationPath` is required** — confirm the path with the user before calling. |
 
 ### Messaging
 | Tool | Notes |
@@ -207,7 +207,7 @@ Two tools take no `view`, both because there is nothing to project:
 - Or `ic_list_assignments(district, studentId, since=..., until=...)` for a date window
 
 **Today's schedule:**
-- `ic_get_schedule(district, studentId)` — returns today's classes by default
+- `ic_get_schedule(district, studentId)` — returns every term's roster; pick out the current term's placements
 
 **Weather closure or priority announcement?**
 - `ic_list_messages(district)` — scan the Messenger 2.0 inbox entries for priority subjects
@@ -216,10 +216,10 @@ Two tools take no `view`, both because there is nothing to project:
 **Download a report card:**
 1. `ic_list_documents(district, studentId)` → find the report card's `url`
 2. Confirm destination path with the user
-3. `ic_download_document(district, url, destinationPath="/Users/.../report-card.pdf")`
+3. `ic_download_document(district, url, destinationPath="report-card.pdf")` — a relative path lands in the download directory
 
 ## Caution
 
-- `ic_download_document` writes to disk at `destinationPath` — confirm the path with the user; overwrites silently.
+- `ic_download_document` writes to disk at `destinationPath`, only inside the download directory, and refuses to replace an existing file unless `overwrite: true` — confirm the path with the user.
 - `ic_list_messages` / `ic_get_message` are nominally read-only, but on some district configurations fetching an inbox message or enumerating the list may mark entries as read. Behavior was not confirmable against an empty test inbox.
 - Endpoint behavior varies by district. If `ic_list_behavior`, `ic_list_food_service`, `ic_list_documents`, `ic_list_assessments`, or `ic_list_fees` returns a `FeatureDisabled` warning, that module is simply turned off for the district — it's not an error. `ic_list_fees` may also return `PartialSuccess` when only one of its two sub-endpoints works.
