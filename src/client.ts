@@ -674,6 +674,10 @@ async function writeConfined(
     throw e;
   }
   try {
+    // The create mode only applies to a NEW file; an overwrite truncates an
+    // existing inode and keeps its mode, so tighten it explicitly. (fchmod is
+    // a no-op for the mode bits on Windows.)
+    if (overwrite) await handle.chmod(0o600);
     await handle.writeFile(buf);
   } finally {
     await handle.close();

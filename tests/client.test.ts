@@ -1042,6 +1042,14 @@ describe('ICClient.download', () => {
       await new ICClient(primaryAccount).download('anoka', '/x', dest);
       expect((await stat(dest)).mode & 0o777).toBe(0o600);
     });
+
+    it('tightens an existing world-readable file to 0600 when overwriting', async () => {
+      mockDownload();
+      const dest = join(dir, 'card.pdf');
+      await fsWriteFile(dest, 'old', { mode: 0o644 });
+      await new ICClient(primaryAccount).download('anoka', '/x', dest, { overwrite: true });
+      expect((await stat(dest)).mode & 0o777).toBe(0o600);
+    });
   });
 });
 
