@@ -664,7 +664,9 @@ async function writeConfined(
   const flags = O_WRONLY | O_CREAT | O_NOFOLLOW | (overwrite ? O_TRUNC : O_EXCL);
   let handle;
   try {
-    handle = await open(real, flags, 0o666);
+    // Owner-only (fleet-audit#1027): these are a child's report cards and
+    // transcripts, so match the 0600 session cache rather than 0666 & ~umask.
+    handle = await open(real, flags, 0o600);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code === 'ELOOP') throw new InvalidPathError(requested, 'is a symlink');

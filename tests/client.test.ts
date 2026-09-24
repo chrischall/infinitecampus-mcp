@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile as fsWriteFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { ICClient, AuthFailedError } from '../src/client.js';
@@ -1021,6 +1021,27 @@ describe('ICClient.download', () => {
     const client = new ICClient(primaryAccount);
     const meta = await client.download('anoka', '/x', dest, { overwrite: true });
     expect(meta.bytes).toBe(3);
+  });
+
+  // PRIV-1 (fleet-audit#1027): a child's report card must not land
+  // world-readable (0644 under the default umask) — owner-only, like the
+  // 0600 session cache that protects it.
+  describe.skipIf(process.platform === 'win32')('file mode', () => {
+    const mockDownload = () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+        .mockResolvedValueOnce(noLinkedAccounts())
+        .mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3]), {
+          status: 200, headers: { 'content-type': 'application/pdf' },
+        }));
+    };
+
+    it('creates the downloaded file owner-only (0600)', async () => {
+      mockDownload();
+      const dest = join(dir, 'card.pdf');
+      await new ICClient(primaryAccount).download('anoka', '/x', dest);
+      expect((await stat(dest)).mode & 0o777).toBe(0o600);
+    });
   });
 });
 
