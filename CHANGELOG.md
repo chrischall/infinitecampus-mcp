@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.4](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.3...v3.1.4) (2026-09-24)
+
+
+### Bug Fixes
+
+* **deps:** bump dotenv from 17.4.2 to 18.0.2 in the production-majors group ([#217](https://github.com/chrischall/infinitecampus-mcp/issues/217)) ([5fb036d](https://github.com/chrischall/infinitecampus-mcp/commit/5fb036db27fcf0fae54b98c963c69bb5a8314e3c))
+* **documents:** save downloaded report cards and transcripts owner-only (0600) ([#219](https://github.com/chrischall/infinitecampus-mcp/issues/219)) ([3d3e120](https://github.com/chrischall/infinitecampus-mcp/commit/3d3e120707973cf241c4e0b73f8a5e394dcc98dc))
+
 ## [3.1.3](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.2...v3.1.3) (2026-09-23)
 
 
