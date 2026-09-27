@@ -49,7 +49,7 @@
         },
         {
           "name": "IC_DISABLE_FETCHPROXY",
-          "description": "Set to 1 to skip the fetchproxy browser-extension fallback (missing creds become a hard error — useful in headless CI).",
+          "description": "Set to 1 to skip the ContextMint Bridge browser-extension fallback (missing creds become a hard error — useful in headless CI).",
           "isRequired": false,
           "format": "string"
         },

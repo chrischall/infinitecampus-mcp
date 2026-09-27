@@ -7,6 +7,7 @@ interface Result {
   ok: boolean;
   credential: { source: string | null; resolved: boolean; detail?: Record<string, unknown> };
   error?: { kind: string; message: string };
+  hint?: string;
 }
 
 const ACCOUNT = { baseUrl: 'https://600.ncsis.gov', district: 'psu600cms', name: 'psu600cms' };
@@ -114,5 +115,22 @@ describe('ic_healthcheck', () => {
     } as unknown as ICClient;
     const { result } = await call({ account: ACCOUNT as never, source: 'fetchproxy', configError: null, client });
     expect(result.credential.detail).toMatchObject({ districts: 'unavailable (discovery needs a live session)' });
+  });
+
+  // The fallback was renamed to ContextMint Bridge everywhere else (auth.ts,
+  // config.ts); a rejected-credential hint that still says "fetchproxy" names
+  // something the user never installed.
+  it('names ContextMint Bridge in the credential_rejected hint', async () => {
+    const client = {
+      ensureDiscovery: vi.fn(async () => {}),
+      listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: true }],
+      request: vi.fn(async () => {
+        throw Object.assign(new Error('HTTP 401'), { status: 401 });
+      }),
+    } as unknown as ICClient;
+    const { result } = await call({ account: ACCOUNT as never, source: 'fetchproxy', configError: null, client });
+    expect(result.error?.kind).toBe('credential_rejected');
+    expect(result.hint).toMatch(/ContextMint Bridge/);
+    expect(result.hint).not.toMatch(/fetchproxy/i);
   });
 });

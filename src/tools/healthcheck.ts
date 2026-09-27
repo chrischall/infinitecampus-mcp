@@ -65,7 +65,7 @@ export function registerHealthcheckTools(
     },
     hints: {
       credential_rejected:
-        'Infinite Campus rejected the credentials. Check IC_USERNAME/IC_PASSWORD, or sign into your IC portal in the browser so the fetchproxy fallback can lift a session.',
+        'Infinite Campus rejected the credentials. Check IC_USERNAME/IC_PASSWORD, or sign into your IC portal in the browser so the ContextMint Bridge extension fallback can lift a session.',
     },
   });
 }

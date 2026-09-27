@@ -38,14 +38,14 @@
     },
     "ic_username": {
       "type": "string",
-      "title": "Username (optional with fetchproxy)",
+      "title": "Username (optional with ContextMint Bridge)",
       "description": "Campus Parent portal username. Leave blank to use the ContextMint Bridge browser extension fallback — sign into your IC portal in the browser and the MCP captures the session cookies automatically.",
       "required": false
     },
     "ic_password": {
       "type": "string",
-      "title": "Password (optional with fetchproxy)",
-      "description": "Campus Parent portal password. Required only when username is set. Leave blank to use the fetchproxy fallback.",
+      "title": "Password (optional with ContextMint Bridge)",
+      "description": "Campus Parent portal password. Required only when username is set. Leave blank to use the ContextMint Bridge browser extension fallback.",
       "required": false,
       "sensitive": true
     },
