@@ -30,7 +30,7 @@
         },
         {
           "name": "IC_USERNAME",
-          "description": "Campus Parent portal username. Optional: leave unset to use the fetchproxy browser-extension fallback.",
+          "description": "Campus Parent portal username. Optional: leave unset to use the ContextMint Bridge browser-extension fallback.",
           "isRequired": false,
           "format": "string"
         },

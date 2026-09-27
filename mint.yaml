@@ -4,7 +4,7 @@ slug: infinitecampus
 summary: >-
   Infinite Campus (Campus Parent) MCP — single-account with CUPS
   auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via
-  the fetchproxy browser extension.
+  the ContextMint Bridge browser extension.
 #
 # Hosting note (a comment, not user-facing summary text): this is a
 # BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
@@ -25,8 +25,8 @@ env:
   - name: IC_USERNAME
     required: false
     help: >-
-      Campus Parent portal username. Optional: leave unset to use the fetchproxy
-      browser-extension fallback.
+      Campus Parent portal username. Optional: leave unset to use the ContextMint
+      Bridge browser-extension fallback.
   - name: IC_PASSWORD
     secret: true
     required: false

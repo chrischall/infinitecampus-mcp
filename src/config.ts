@@ -67,7 +67,7 @@ export function loadAccount(env: Record<string, string | undefined> = process.en
     throw new Error(
       `Missing required env var(s) for password auth: ${partialMissing.join(', ')}. ` +
       'Set both IC_USERNAME and IC_PASSWORD, or leave both unset to use the fetchproxy ' +
-      'fallback (requires the fetchproxy browser extension and a signed-in IC portal tab).',
+      'fallback (requires the ContextMint Bridge browser extension and a signed-in IC portal tab).',
     );
   }
 
