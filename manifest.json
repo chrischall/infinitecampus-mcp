@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "infinitecampus-mcp",
   "version": "3.1.4",
-  "description": "Infinite Campus (Campus Parent) MCP — single-account with CUPS auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via the fetchproxy browser extension.",
+  "description": "Infinite Campus (Campus Parent) MCP — single-account with CUPS auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via the ContextMint Bridge browser extension.",
   "author": {
     "name": "Claude Code (AI)"
   },
@@ -39,7 +39,7 @@
     "ic_username": {
       "type": "string",
       "title": "Username (optional with fetchproxy)",
-      "description": "Campus Parent portal username. Leave blank to use the fetchproxy 0.3.0 browser extension fallback — sign into your IC portal in the browser and the MCP captures the session cookies automatically.",
+      "description": "Campus Parent portal username. Leave blank to use the ContextMint Bridge browser extension fallback — sign into your IC portal in the browser and the MCP captures the session cookies automatically.",
       "required": false
     },
     "ic_password": {

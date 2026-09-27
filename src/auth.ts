@@ -133,7 +133,7 @@ export async function resolveAuth(): Promise<ResolvedAuth> {
   // ── Path 3: nothing configured and fetchproxy explicitly disabled.
   throw new Error(
     'IC auth: set IC_USERNAME + IC_PASSWORD, ' +
-      'or install the fetchproxy extension and sign into your IC portal ' +
+      'or install the ContextMint Bridge browser extension and sign into your IC portal ' +
       '(unset IC_DISABLE_FETCHPROXY if it is set).',
   );
 }
@@ -203,13 +203,13 @@ async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
     if (!jsessionid) {
       throw new Error(
         `JSESSIONID cookie not found on ${host}. ` +
-          'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
+          'Sign into your IC portal in your browser (with the ContextMint Bridge extension installed) and retry.',
       );
     }
     if (!xsrf) {
       throw new Error(
         `XSRF-TOKEN cookie not found on ${host}. ` +
-          'Sign into your IC portal in your browser (with the fetchproxy extension installed) and retry.',
+          'Sign into your IC portal in your browser (with the ContextMint Bridge extension installed) and retry.',
       );
     }
 
@@ -228,7 +228,7 @@ async function liftBrowserSession(account: Account): Promise<ICBrowserSession> {
     if (classifyBridgeError(e) === 'bridge_down') {
       const downErr = e as FetchproxyBridgeDownError;
       throw new Error(
-        `IC auth: fetchproxy bridge is down (extension service worker unreachable after retry). ${downErr.hint}`,
+        `IC auth: ContextMint Bridge is down (extension service worker unreachable after retry). ${downErr.hint}`,
       );
     }
     const msg = e instanceof Error ? e.message : String(e);
