@@ -48,4 +48,12 @@ describe('ContextMint Bridge naming in user-facing config copy', () => {
     expect(readme).toMatch(/\*\*ContextMint Bridge fallback \(no password needed\)\.\*\*/);
     expect(readme).not.toMatch(/\*\*fetchproxy fallback/i);
   });
+
+  it('the startup banner (user-visible stderr) names ContextMint Bridge', () => {
+    // index.ts is a top-level-await script whose bridge path needs a live
+    // browser to reach, so the banner copy is checked at the source.
+    const src = read('src/index.ts');
+    expect(src).toMatch(/\[via ContextMint Bridge\]/);
+    expect(src).not.toMatch(/\[via fetchproxy\]/i);
+  });
 });
