@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.1.5](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.4...v3.1.5) (2026-09-27)
+
+
+### Bug Fixes
+
+* **auth:** name ContextMint Bridge in the remaining fetchproxy-fallback hints and install copy ([#223](https://github.com/chrischall/infinitecampus-mcp/issues/223)) ([df89c38](https://github.com/chrischall/infinitecampus-mcp/commit/df89c38000ca210f2ee304ff29499dbaf6c8a394))
+* **auth:** name ContextMint Bridge in the startup banner ([#228](https://github.com/chrischall/infinitecampus-mcp/issues/228)) ([b384c62](https://github.com/chrischall/infinitecampus-mcp/commit/b384c626ac75b313459fb9140f4984ceaf19fe28))
+* **deps:** bump dotenv from 18.0.2 to 18.0.3 in the production-dependencies group ([#227](https://github.com/chrischall/infinitecampus-mcp/issues/227)) ([ff1082d](https://github.com/chrischall/infinitecampus-mcp/commit/ff1082d7ec551139cbd0b9d625f05e5a6daa9e0e))
+* **deps:** move to [@fetchproxy](https://github.com/fetchproxy) 3.4 for ContextMint Bridge errors, capability subsets and managed pins ([#220](https://github.com/chrischall/infinitecampus-mcp/issues/220)) ([1374ba8](https://github.com/chrischall/infinitecampus-mcp/commit/1374ba80af6b62d571bac791f37b119ef363623a))
+* **deps:** move to @chrischall/mcp-utils 2.8 and [@fetchproxy](https://github.com/fetchproxy) 3.4.1 for clearer browser-bridge errors ([#225](https://github.com/chrischall/infinitecampus-mcp/issues/225)) ([e47044e](https://github.com/chrischall/infinitecampus-mcp/commit/e47044e0e831b88a749cc6c1f6ad1103a93d7413))
+
 ## [3.1.4](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.3...v3.1.4) (2026-09-24)
 
 
