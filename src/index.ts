@@ -144,7 +144,7 @@ function unconfiguredClient(reason: Error | null): ICClient {
     registerFeaturesTools,
   ];
 
-  const suffix = source === 'fetchproxy' ? ' [via fetchproxy]' : '';
+  const suffix = source === 'fetchproxy' ? ' [via ContextMint Bridge]' : '';
   const banner = account
     ? `[infinitecampus-mcp] District: ${account.name} (${account.baseUrl})${suffix}`
     : `[infinitecampus-mcp] Not configured: ${configError?.message ?? 'unknown error'}\n` +
