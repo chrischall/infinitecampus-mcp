@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from 'path';
 import {
   assertPathWithinRoots,
   detectEdgeBlock,
+  EdgeBlockedError,
   FileWriteRefusedError,
   parseCookieJar,
   truncateErrorMessage,
@@ -37,8 +38,13 @@ const SESSION_TTL_MS = 5 * 60 * 60 * 1000; // 5h, slightly under IC's typical 6h
  * not be treated as an expiry. Reads a clone, leaving the caller's body intact.
  */
 async function isEdgeBlocked(res: Response): Promise<boolean> {
+  return (await edgeBlockVendor(res)) !== null;
+}
+
+/** The edge vendor whose refusal page `res` is, or null when it is not shown to be one. */
+async function edgeBlockVendor(res: Response): Promise<string | null> {
   const body = await res.clone().text().catch(() => '');
-  return detectEdgeBlock({ body, headers: res.headers, status: res.status }) !== null;
+  return detectEdgeBlock({ body, headers: res.headers, status: res.status })?.vendor ?? null;
 }
 
 export interface RequestOpts {
@@ -619,6 +625,17 @@ export class ICClient {
         },
       }),
     );
+    if (!res.ok) {
+      // A CDN/WAF refusal page (chrischall/mcp-host#1015) never reached IC, so
+      // nothing judged the session: withSession already returned it untouched
+      // (no invalidate, no re-login), and it must not read as an expiry here.
+      const vendor = await edgeBlockVendor(res);
+      if (vendor) {
+        throw new EdgeBlockedError(res.status, vendor, {
+          service: 'Infinite Campus', method: 'GET', path: new URL(url).pathname,
+        });
+      }
+    }
     if (res.status === 401) throw new SessionExpiredError(account.name);
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 

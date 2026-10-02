@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { EdgeBlockedError } from '@chrischall/mcp-utils';
 import { createTestHarness, parseToolResult } from '@chrischall/mcp-utils/test';
 import { ICClient } from '../src/client.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
@@ -166,5 +170,119 @@ describe('ic_healthcheck on a CDN/WAF block', () => {
       .catch((e: unknown) => e as Error & { bodyPreview?: string });
     expect(err.message).toMatch(/IC 404 Not Found/);
     expect(err.bodyPreview).toBe('');
+  });
+});
+
+// Cloudflare's managed-challenge interstitial, as served in front of an origin.
+const CLOUDFLARE_CHALLENGE =
+  '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>' +
+  '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body>' +
+  '<div class="main-wrapper" role="main"><div class="main-content"><noscript>' +
+  '<div class="h2"><span id="challenge-error-text">Enable JavaScript and cookies to continue</span></div>' +
+  '</noscript></div></div><script>(function(){window._cf_chl_opt={cvId: \'3\',cZone: \'anoka.infinitecampus.org\'};' +
+  "var a = document.createElement('script');a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1';" +
+  '}());</script></body></html>';
+
+describe('ICClient.download on a CDN/WAF block (chrischall/mcp-host#1015)', () => {
+  let dir: string;
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    dir = await mkdtemp(join(tmpdir(), 'ic-edge-dl-'));
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  /** Route login/discovery, and serve each download from `downloads` in turn. */
+  function routeDownload(downloads: Array<() => Response>) {
+    const state = { logins: 0, cookies: [] as string[] };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('/campus/verify.jsp')) {
+        state.logins++;
+        return new Response('<AUTHENTICATION>success</AUTHENTICATION>', {
+          status: 200,
+          headers: { 'set-cookie': `JSESSIONID=s${state.logins}; Path=/` },
+        });
+      }
+      if (url.includes('linkedAccounts')) return json({ accounts: [] });
+      if (url.includes('/campus/doc')) {
+        state.cookies.push(((init?.headers ?? {}) as Record<string, string>).Cookie ?? '');
+        const next = downloads.shift();
+        if (!next) throw new Error('no more download responses');
+        return next();
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    return state;
+  }
+
+  const pdf = () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'content-type': 'application/pdf' } });
+
+  it('throws EdgeBlockedError, not SessionExpiredError, on a 401 CloudFront refusal page', async () => {
+    const state = routeDownload([
+      () => new Response(CLOUDFRONT_BLOCK, { status: 401, headers: { 'content-type': 'text/html' } }),
+    ]);
+    const err = await new ICClient(ACCOUNT)
+      .download('anoka', '/campus/doc', join(dir, 'a.pdf'))
+      .catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(EdgeBlockedError);
+    expect(err.name).not.toBe('SessionExpiredError');
+    expect((err as EdgeBlockedError).vendor).toBe('CloudFront');
+    expect((err as EdgeBlockedError).status).toBe(401);
+    expect(err.message).not.toMatch(/Session expired|IC_USERNAME|IC_PASSWORD/);
+    // No re-login was spent on it, and nothing was written.
+    expect(state.logins).toBe(1);
+    await expect(stat(join(dir, 'a.pdf'))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('keeps the stored session through a 401 block: the next download reuses it with no re-login', async () => {
+    const state = routeDownload([
+      () => new Response(CLOUDFRONT_BLOCK, { status: 401, headers: { 'content-type': 'text/html' } }),
+      pdf,
+    ]);
+    const client = new ICClient(ACCOUNT);
+    await expect(client.download('anoka', '/campus/doc', join(dir, 'a.pdf'))).rejects.toBeInstanceOf(EdgeBlockedError);
+    const meta = await client.download('anoka', '/campus/doc', join(dir, 'b.pdf'));
+    expect(meta.bytes).toBe(3);
+    expect(state.logins).toBe(1);
+    expect(state.cookies).toEqual(['JSESSIONID=s1', 'JSESSIONID=s1']);
+  });
+
+  it('throws EdgeBlockedError on a 403 Cloudflare challenge page', async () => {
+    routeDownload([
+      () => new Response(CLOUDFLARE_CHALLENGE, {
+        status: 403,
+        headers: { 'content-type': 'text/html; charset=UTF-8', 'cf-mitigated': 'challenge', server: 'cloudflare' },
+      }),
+    ]);
+    const err = await new ICClient(ACCOUNT)
+      .download('anoka', '/campus/doc', join(dir, 'a.pdf'))
+      .catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(EdgeBlockedError);
+    expect((err as EdgeBlockedError).vendor).toBe('Cloudflare');
+  });
+
+  it('control: a genuine 401 from IC is still an expired session (re-login, one replay, then SessionExpiredError)', async () => {
+    const state = routeDownload([
+      () => new Response('', { status: 401 }),
+      () => new Response('', { status: 401 }),
+    ]);
+    const err = await new ICClient(ACCOUNT)
+      .download('anoka', '/campus/doc', join(dir, 'a.pdf'))
+      .catch((e: unknown) => e as Error);
+    expect(err.name).toBe('SessionExpiredError');
+    expect(err).not.toBeInstanceOf(EdgeBlockedError);
+    expect(state.logins).toBe(2);
+  });
+
+  it('control: an ordinary non-block 403 keeps the plain download status error', async () => {
+    routeDownload([() => json({ error: 'forbidden' }, 403)]);
+    const err = await new ICClient(ACCOUNT)
+      .download('anoka', '/campus/doc', join(dir, 'a.pdf'))
+      .catch((e: unknown) => e as Error);
+    expect(err).not.toBeInstanceOf(EdgeBlockedError);
+    expect(err.message).toMatch(/IC download 403/);
   });
 });
