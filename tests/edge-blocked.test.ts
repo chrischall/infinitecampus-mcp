@@ -98,6 +98,47 @@ describe('ic_healthcheck on a CDN/WAF block', () => {
     expect(r.error?.kind).toBe('edge_blocked');
   });
 
+  it('reports edge_blocked, not an expired session, when the data probe gets a 401 refusal page', async () => {
+    // mcp-utils 2.10 returns a 401 refusal page from withSession untouched
+    // (no re-login). It must not then be dressed as SessionExpiredError.
+    route({
+      login: loggedIn,
+      probe: () => new Response(CLOUDFRONT_BLOCK, { status: 401, headers: { 'content-type': 'text/html' } }),
+    });
+    const r = await healthcheck(new ICClient(ACCOUNT));
+    expect(r.ok).toBe(false);
+    expect(r.error?.kind).toBe('edge_blocked');
+  });
+
+  it('does not re-login or throw SessionExpiredError on a 401 refusal page', async () => {
+    let logins = 0;
+    route({
+      login: () => { logins++; return loggedIn(); },
+      probe: () => new Response(CLOUDFRONT_BLOCK, { status: 401, headers: { 'content-type': 'text/html' } }),
+    });
+    const err = await new ICClient(ACCOUNT)
+      .request('anoka', '/campus/api/portal/students')
+      .catch((e: unknown) => e as Error & { bodyPreview?: string });
+    expect(err.name).not.toBe('SessionExpiredError');
+    expect(err.message).toMatch(/IC 401/);
+    expect(err.bodyPreview).toMatch(/could not be satisfied/);
+    expect(logins).toBe(1);
+  });
+
+  it('treats a 401 whose body cannot be read as an expired session, not a block', async () => {
+    // Nothing shows it is a refusal page, so the ordinary expiry path runs:
+    // re-login, one replay, then SessionExpiredError.
+    const unreadable401 = () =>
+      new Response(new ReadableStream({ pull(c) { c.error(new Error('stream reset')); } }), { status: 401 });
+    let logins = 0;
+    route({ login: () => { logins++; return loggedIn(); }, probe: unreadable401 });
+    const err = await new ICClient(ACCOUNT)
+      .request('anoka', '/campus/api/portal/students')
+      .catch((e: unknown) => e as Error);
+    expect(err.name).toBe('SessionExpiredError');
+    expect(logins).toBe(2);
+  });
+
   it('does not call an ordinary 403 from the portal an edge block', async () => {
     route({ login: loggedIn, probe: () => json({ error: 'forbidden' }, 403) });
     const r = await healthcheck(new ICClient(ACCOUNT));

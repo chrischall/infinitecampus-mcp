@@ -1,7 +1,7 @@
 import { open, lstat, realpath } from 'fs/promises';
 import { constants as fsConstants } from 'fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
-import { parseCookieJar, truncateErrorMessage } from '@chrischall/mcp-utils';
+import { detectEdgeBlock, parseCookieJar, truncateErrorMessage } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
 import { resolveDownloadDir, type Account } from './config.js';
 import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
@@ -24,6 +24,16 @@ interface LinkedAccount {
 }
 
 const SESSION_TTL_MS = 5 * 60 * 60 * 1000; // 5h, slightly under IC's typical 6h
+
+/**
+ * Whether a failed response is a CDN/WAF refusal page rather than IC's own
+ * answer (chrischall/mcp-host#1015). Nothing judged the session, so it must
+ * not be treated as an expiry. Reads a clone, leaving the caller's body intact.
+ */
+async function isEdgeBlocked(res: Response): Promise<boolean> {
+  const body = await res.clone().text().catch(() => '');
+  return detectEdgeBlock({ body, headers: res.headers, status: res.status }) !== null;
+}
 
 export interface RequestOpts {
   method?: 'GET' | 'POST';
@@ -170,9 +180,14 @@ export class ICClient {
    * the primary in, whose discovery re-establishes all of them. `withSession`
    * invalidates the requesting district itself. Mirrors the old hand-rolled
    * doRequest 401 handling.
+   *
+   * A 401 that is a CDN/WAF refusal page is NOT an expiry: returning false
+   * here (rather than leaning on withSession's own edge check, which runs
+   * only AFTER this predicate) keeps the primary and sibling sessions alive.
    */
-  private detectExpiredSession(district: string, res: Response): boolean {
+  private async detectExpiredSession(district: string, res: Response): Promise<boolean> {
     if (res.status !== 401) return false;
+    if (await isEdgeBlocked(res)) return false;
     const primaryName = this.linkedTo.get(district);
     if (primaryName) {
       this.managers.get(primaryName)!.invalidate();
@@ -630,7 +645,9 @@ export class ICClient {
       }),
     );
 
-    if (res.status === 401) {
+    // A 401 refusal page comes back untouched (no re-login): report it with
+    // its body below, so it reads as a block rather than an expired session.
+    if (res.status === 401 && !(await isEdgeBlocked(res))) {
       // We only reach here when the re-login SUCCEEDED but the replayed request
       // 401'd again (a fresh session the portal still rejects). If the re-login
       // itself failed, the `onReplayLoginError` hook already rethrew that
