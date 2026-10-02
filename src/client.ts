@@ -1,7 +1,13 @@
-import { open, lstat, realpath } from 'fs/promises';
-import { constants as fsConstants } from 'fs';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
-import { detectEdgeBlock, parseCookieJar, truncateErrorMessage } from '@chrischall/mcp-utils';
+import { lstat, realpath } from 'fs/promises';
+import { basename, dirname, join, resolve } from 'path';
+import {
+  assertPathWithinRoots,
+  detectEdgeBlock,
+  FileWriteRefusedError,
+  parseCookieJar,
+  truncateErrorMessage,
+  writeFileSafe,
+} from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
 import { resolveDownloadDir, type Account } from './config.js';
 import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
@@ -675,35 +681,25 @@ export class ICClient {
  * Write a download to its (already confined) destination without ever
  * following a symlink at the final path component. The pre-flight lstat in
  * download() is separated from this write by a network fetch, so a link can
- * be planted in between; O_NOFOLLOW makes the open itself refuse it (ELOOP),
- * and O_EXCL (without overwrite) refuses anything that appeared at all.
+ * be planted in between; mcp-utils `writeFileSafe` opens with O_NOFOLLOW (the
+ * open itself refuses a link) and, without overwrite, O_EXCL (refusing
+ * anything that appeared at all) — the open this repo pioneered, upstreamed.
  */
 async function writeConfined(
   real: string, requested: string, buf: Uint8Array, overwrite: boolean,
 ): Promise<void> {
-  // O_NOFOLLOW is POSIX-only: on Windows it is undefined, which `|` coerces to
-  // 0 (and creating a symlink there needs elevated rights anyway).
-  const { O_WRONLY, O_CREAT, O_TRUNC, O_EXCL, O_NOFOLLOW } = fsConstants;
-  const flags = O_WRONLY | O_CREAT | O_NOFOLLOW | (overwrite ? O_TRUNC : O_EXCL);
-  let handle;
   try {
     // Owner-only (fleet-audit#1027): these are a child's report cards and
     // transcripts, so match the 0600 session cache rather than 0666 & ~umask.
-    handle = await open(real, flags, 0o600);
+    // With overwrite, writeFileSafe also fchmods the truncated inode (whose
+    // mode the create flag would not touch).
+    await writeFileSafe(real, buf, { overwrite, mode: 0o600 });
   } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === 'ELOOP') throw new InvalidPathError(requested, 'is a symlink');
-    if (code === 'EEXIST') throw new FileExistsError(requested);
+    if (e instanceof FileWriteRefusedError) {
+      if (e.reason === 'symlink') throw new InvalidPathError(requested, 'is a symlink');
+      throw new FileExistsError(requested);
+    }
     throw e;
-  }
-  try {
-    // The create mode only applies to a NEW file; an overwrite truncates an
-    // existing inode and keeps its mode, so tighten it explicitly. (fchmod is
-    // a no-op for the mode bits on Windows.)
-    if (overwrite) await handle.chmod(0o600);
-    await handle.writeFile(buf);
-  } finally {
-    await handle.close();
   }
 }
 
@@ -725,12 +721,17 @@ async function confinedDestination(destinationPath: string): Promise<{ requested
   const parent = dirname(requested);
   let parentReal: string;
   try { parentReal = await realpath(parent); } catch { throw new ParentDirectoryMissingError(parent); }
-  const real = join(parentReal, basename(requested));
-  const rel = relative(rootReal, real);
-  if (isAbsolute(rel) || rel.split(sep)[0] === '..') {
+  // The parent must already exist (stricter than assertPathWithinRoots, which
+  // would accept a not-yet-created tail) — downloads never create directories.
+  // Containment is judged on the REAL parent; the final component is
+  // re-attached unresolved so a symlink there is refused by lstat/O_NOFOLLOW
+  // rather than followed.
+  try {
+    assertPathWithinRoots(parentReal, [rootReal]);
+  } catch {
     throw new PathOutsideDownloadDirError(destinationPath, root);
   }
-  return { requested, real };
+  return { requested, real: join(parentReal, basename(requested)) };
 }
 
 /**
