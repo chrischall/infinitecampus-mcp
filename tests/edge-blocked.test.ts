@@ -113,4 +113,17 @@ describe('ic_healthcheck on a CDN/WAF block', () => {
     expect(typeof err.bodyPreview).toBe('string');
     expect(err.bodyPreview!.length).toBeLessThanOrEqual(600);
   });
+
+  it('still throws the status error when the failed response body cannot be read', async () => {
+    // A body that errors mid-read must not replace the HTTP failure with a
+    // stream error: the status line is what the caller branches on.
+    const unreadable = new Response('', { status: 404, statusText: 'Not Found' });
+    vi.spyOn(unreadable, 'text').mockRejectedValue(new Error('stream reset'));
+    route({ login: loggedIn, probe: () => unreadable });
+    const err = await new ICClient(ACCOUNT)
+      .request('anoka', '/campus/api/portal/students')
+      .catch((e: unknown) => e as Error & { bodyPreview?: string });
+    expect(err.message).toMatch(/IC 404 Not Found/);
+    expect(err.bodyPreview).toBe('');
+  });
 });
