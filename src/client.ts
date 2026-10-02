@@ -1,7 +1,7 @@
 import { open, lstat, realpath } from 'fs/promises';
 import { constants as fsConstants } from 'fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
-import { parseCookieJar } from '@chrischall/mcp-utils';
+import { parseCookieJar, truncateErrorMessage } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
 import { resolveDownloadDir, type Account } from './config.js';
 import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
@@ -379,7 +379,9 @@ export class ICClient {
     // actual reason so the LLM can give the user something useful.
     const body = await postRes.text();
     if (postRes.status >= 400) {
-      throw new AuthFailedError(account.name, `HTTP ${postRes.status} from verify.jsp`);
+      throw new AuthFailedError(account.name, `HTTP ${postRes.status} from verify.jsp`, {
+        bodyPreview: bodyPreviewOf(body),
+      });
     }
     const authMatch = body.match(/<AUTHENTICATION>([^<]+)<\/AUTHENTICATION>/i);
     const authState = authMatch?.[1]?.trim().toLowerCase() ?? '';
@@ -638,7 +640,11 @@ export class ICClient {
       throw new SessionExpiredError(account.name);
     }
     if (res.status >= 500) throw new PortalUnreachableError(account.name, res.status);
-    if (!res.ok) throw new Error(`IC ${res.status} ${res.statusText} for ${path}`);
+    if (!res.ok) {
+      const failure = new Error(`IC ${res.status} ${res.statusText} for ${path}`) as Error & { bodyPreview: string };
+      failure.bodyPreview = bodyPreviewOf(await res.text().catch(() => ''));
+      throw failure;
+    }
 
     const text = await res.text();
     if (opts.responseType === 'text') {
@@ -755,6 +761,17 @@ function parseSetCookies(headers: Headers): { cookieHeader: string; xsrfToken: s
   return { cookieHeader, xsrfToken: cookies['XSRF-TOKEN'] ?? '' };
 }
 
+/**
+ * A bounded, redacted excerpt of a failed response's body, kept on the thrown
+ * error as `bodyPreview`. The shared healthcheck reads that field to tell a
+ * CDN/WAF refusal page (CloudFront "Request blocked", a Cloudflare challenge)
+ * from the portal's own answer; without it a block on this host is
+ * indistinguishable from any other failure (chrischall/mcp-host#1015).
+ */
+function bodyPreviewOf(body: string): string {
+  return truncateErrorMessage(body, 500);
+}
+
 export class UnknownDistrictError extends Error {
   constructor(public district: string, public available: string[]) {
     super(`Unknown district '${district}'. Configured: [${available.join(', ')}]`);
@@ -770,6 +787,8 @@ export class AuthFailedError extends Error {
    * and rethrows permanent errors instead of retrying.
    */
   public permanent: boolean;
+  /** A bounded, redacted excerpt of the login response body, when there was one. */
+  public bodyPreview?: string;
 
   /**
    * @param opts.credentialHint When `false`, the message omits the
@@ -777,11 +796,12 @@ export class AuthFailedError extends Error {
    *   credentials are known-good (e.g. a linked-district CUPS/SSO re-discovery
    *   failure) and pointing the user at their creds would be misleading.
    * @param opts.permanent See {@link AuthFailedError.permanent}.
+   * @param opts.bodyPreview See {@link AuthFailedError.bodyPreview}.
    */
   constructor(
     public district: string,
     public reason?: string,
-    opts?: { credentialHint?: boolean; permanent?: boolean },
+    opts?: { credentialHint?: boolean; permanent?: boolean; bodyPreview?: string },
   ) {
     const detail = reason ? ` (${reason})` : '';
     const remedy =
@@ -792,6 +812,7 @@ export class AuthFailedError extends Error {
     super(`Login failed for district '${district}'${detail}. ${remedy}`);
     this.name = 'AuthFailedError';
     this.permanent = opts?.permanent ?? false;
+    if (opts?.bodyPreview !== undefined) this.bodyPreview = opts.bodyPreview;
   }
 }
 
