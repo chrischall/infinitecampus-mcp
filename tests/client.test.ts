@@ -858,6 +858,13 @@ describe('ICClient.download', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
+    it('refuses the download directory itself as the destination, without any request', async () => {
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', dir)).rejects.toThrow(/PathOutsideDownloadDir|InvalidPath/);
+      await expect(client.download('anoka', '/x', '.')).rejects.toThrow(/PathOutsideDownloadDir|InvalidPath/);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
     it('refuses a symlinked parent directory that points outside', async () => {
       const outside = await mkdtemp(join(tmpdir(), 'ic-outside-'));
       try {
@@ -909,11 +916,26 @@ describe('ICClient.download', () => {
         const client = new ICClient(primaryAccount);
         await expect(
           client.download('anoka', '/x', join(dir, 'race.pdf'), opts),
-        ).rejects.toThrow(opts.overwrite ? /InvalidPath.*symlink/ : /FileExists/);
+        // Named for what it is in both modes: O_EXCL reports EEXIST for a
+        // planted link, which writeFileSafe identifies as a symlink.
+        ).rejects.toThrow(/InvalidPath.*symlink/);
         expect(await readFile(join(outside, 'victim'), 'utf8')).toBe('keep');
       } finally {
         await rm(outside, { recursive: true, force: true });
       }
+    });
+
+    it('refuses a regular file that appeared during the fetch, without overwrite', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+        .mockResolvedValueOnce(noLinkedAccounts())
+        .mockImplementationOnce(async () => {
+          await fsWriteFile(join(dir, 'late.pdf'), 'keep');
+          return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+        });
+      const client = new ICClient(primaryAccount);
+      await expect(client.download('anoka', '/x', join(dir, 'late.pdf'))).rejects.toThrow(/FileExists/);
+      expect(await readFile(join(dir, 'late.pdf'), 'utf8')).toBe('keep');
     });
 
     it('surfaces other write errors as-is (parent removed mid-fetch)', async () => {
