@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.1.6](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.5...v3.1.6) (2026-10-03)
+
+
+### Bug Fixes
+
+* **deps:** adopt @chrischall/mcp-utils 2.12.0 confinement and no-follow writer ([#232](https://github.com/chrischall/infinitecampus-mcp/issues/232)) ([77e61be](https://github.com/chrischall/infinitecampus-mcp/commit/77e61bec8c49c7229951e9ab4b2541b44a5b1de6))
+* **deps:** bump @chrischall/mcp-utils to 2.13.0 ([#235](https://github.com/chrischall/infinitecampus-mcp/issues/235)) ([aeff6ad](https://github.com/chrischall/infinitecampus-mcp/commit/aeff6adb282fea4ca94feacf61b583aded7f4732))
+* **documents:** report a CDN/WAF block on ic_download_document as edge_blocked, not an expired session ([#233](https://github.com/chrischall/infinitecampus-mcp/issues/233)) ([3cba0ea](https://github.com/chrischall/infinitecampus-mcp/commit/3cba0ea51ab0d97095d1dd3cbb808061294ef81e))
+* keep credentials and report edge_blocked on CDN/WAF blocks (mcp-utils 2.10.0) ([#231](https://github.com/chrischall/infinitecampus-mcp/issues/231)) ([9160dff](https://github.com/chrischall/infinitecampus-mcp/commit/9160dff62acee61350fd9c4794dc24b0e60fafcf))
+* report CDN/WAF blocks as edge_blocked, not a rejected credential (mcp-utils 2.9.0) ([#229](https://github.com/chrischall/infinitecampus-mcp/issues/229)) ([b554cde](https://github.com/chrischall/infinitecampus-mcp/commit/b554cdebb47c19854e19c34caf55642f27ddd68b))
+
+
+### Documentation
+
+* stop telling agents to arm the release PR ([#234](https://github.com/chrischall/infinitecampus-mcp/issues/234)) ([f0c2b4e](https://github.com/chrischall/infinitecampus-mcp/commit/f0c2b4e97964ca7b74e56e0539114e969487d6d7))
+
 ## [3.1.5](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.4...v3.1.5) (2026-09-27)
 
 
