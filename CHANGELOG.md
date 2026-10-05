@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.7](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.6...v3.1.7) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group with 3 updates ([#238](https://github.com/chrischall/infinitecampus-mcp/issues/238)) ([c7ba806](https://github.com/chrischall/infinitecampus-mcp/commit/c7ba806cfe33cf862a4925ae180d7c3303bf1693))
+* **deps:** require @chrischall/mcp-utils 2.14.0 and MCP SDK 2.3.0 ([#240](https://github.com/chrischall/infinitecampus-mcp/issues/240)) ([576d628](https://github.com/chrischall/infinitecampus-mcp/commit/576d628de5e50e32ceda06310df7ab47108e9ac4))
+
 ## [3.1.6](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.5...v3.1.6) (2026-10-03)
 
 
