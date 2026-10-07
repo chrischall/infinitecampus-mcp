@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.8](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.7...v3.1.8) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** bump source-map-js from 1.2.1 to 1.2.2 in the security group across 1 directory ([#243](https://github.com/chrischall/infinitecampus-mcp/issues/243)) ([a7c6a19](https://github.com/chrischall/infinitecampus-mcp/commit/a7c6a1961cb055b496f1a6984b3aabd1eb4e4657))
+* **deps:** update mcp-utils to 2.15.0 and fetchproxy to 3.6.0 (elicitation opt-out, safer room frames) ([#241](https://github.com/chrischall/infinitecampus-mcp/issues/241)) ([fdf1c76](https://github.com/chrischall/infinitecampus-mcp/commit/fdf1c76e63294ecf109ead5d8362b808f8ed4581))
+
 ## [3.1.7](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.6...v3.1.7) (2026-10-05)
 
 
