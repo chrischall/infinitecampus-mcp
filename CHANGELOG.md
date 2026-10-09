@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.1.9](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.8...v3.1.9) (2026-10-09)
+
+
+### Bug Fixes
+
+* annotate tools truthfully and sync manifests with the served tools ([#247](https://github.com/chrischall/infinitecampus-mcp/issues/247)) ([5659f92](https://github.com/chrischall/infinitecampus-mcp/commit/5659f92ff169303164ed4f0d2d6583fd61ff9b12))
+* declare the plugin MCP config under the mcpServers key Claude Code reads ([#248](https://github.com/chrischall/infinitecampus-mcp/issues/248)) ([ee14acd](https://github.com/chrischall/infinitecampus-mcp/commit/ee14acd286cbe62dfbad4b0cc07ac4f80216490b))
+* **deps:** update @chrischall/mcp-utils to 3.0.0 ([#246](https://github.com/chrischall/infinitecampus-mcp/issues/246)) ([291e924](https://github.com/chrischall/infinitecampus-mcp/commit/291e924a879c0cf7c1698c171df0c455448502e0))
+* resolve low-severity audit findings ([#244](https://github.com/chrischall/infinitecampus-mcp/issues/244)) ([19d116e](https://github.com/chrischall/infinitecampus-mcp/commit/19d116e3166e9f246129f349cf0dc2a755877b56))
+
 ## [3.1.8](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.7...v3.1.8) (2026-10-07)
 
 
