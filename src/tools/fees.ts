@@ -22,7 +22,7 @@ export function registerFeeTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_fees', {
     description:
       "List a student's fee assignments (charges owed) and running balance/surplus. Combines two endpoints: fee assignments and totalSurplus. Returns FeatureDisabled only if both endpoints 404; if only one works, returns that side with warning: 'PartialSuccess' and an issues[] explaining which endpoint failed.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

@@ -10,7 +10,7 @@ const argsSchema = z.object({
 export function registerStudentTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_students', {
     description: 'List students enrolled under the parent account for a given district.',
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

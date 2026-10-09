@@ -52,7 +52,7 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_school_days', {
     description:
       "List a student's school days (instructional calendar) grouped by term. Returns one entry per enrollment, with term boundaries (Q1-Q4 start/end dates) and the school days inside each term — including comments like 'Teacher Workday' or 'Spring Break'. Use since/until to narrow the range.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

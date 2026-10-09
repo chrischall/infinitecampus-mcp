@@ -60,7 +60,7 @@ function defaultSinceDate(now: Date): string {
 export function registerRecentGradesTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_recent_grades', {
     description: "List recently-graded assignments for a student. Server-side filtered by scoreModifiedDate. Pass since=YYYY-MM-DD to set the cutoff; defaults to 14 days ago.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
