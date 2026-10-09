@@ -12,7 +12,7 @@ const argsSchema = z.object({
 export function registerGradeTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_grades', {
     description: "List a student's term grades and in-progress course grades.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

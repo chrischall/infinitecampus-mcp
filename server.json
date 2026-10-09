@@ -70,6 +70,24 @@
           "description": "Absolute path of the only directory ic_download_document may write into. Defaults to ~/Downloads.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "FETCHPROXY_WS_PORT",
+          "description": "Localhost concentrator port (default 37149). On one machine every MCP shares the concentrator, so move it for ALL of them or not at all.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "FETCHPROXY_WS_HOST",
+          "description": "Bind interface (default 127.0.0.1; a literal IP only, anything else is ignored). Keep on loopback — it exists for ONE topology: a hosted child in its own network namespace.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "FETCHPROXY_IDENTITY_DIR",
+          "description": "Where to store the long-term fetchproxy identity keypair (default ~/.fetchproxy/identity/; an absolute path only, anything else is ignored). Exists for a host that runs a separate child per caller, so they can share one identity.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

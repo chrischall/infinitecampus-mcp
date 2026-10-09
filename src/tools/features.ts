@@ -22,7 +22,7 @@ export function registerFeaturesTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_get_features', {
     description:
       "List the district's displayOptions feature-flag allow-list for each of a student's enrollments. Each enrollment's `features` object is a map of ~90 flag names (attendance, behavior, assessment, documents, grades, schedule, etc.) to booleans. A `false` value means the district has that feature disabled for this enrollment; `true` or missing means it's available. An enrollment whose flags could not be fetched carries `error` instead of `features`. Used internally by other tools to short-circuit disabled features, but exposed here so the LLM can answer capability questions directly.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

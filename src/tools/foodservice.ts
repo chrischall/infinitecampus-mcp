@@ -16,7 +16,7 @@ const EMPTY_FOOD = { balance: null, transactions: [] };
 export function registerFoodServiceTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_food_service', {
     description: "List a student's lunch balance and recent food-service transactions. Returns FeatureDisabled if the district has the module turned off (detected via displayOptions or a 404 backstop).",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

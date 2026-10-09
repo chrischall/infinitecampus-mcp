@@ -16,7 +16,7 @@ const argsSchema = z.object({
 export function registerScheduleTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_get_schedule', {
     description: "Get a student's class roster: every course with its section placements, across every term of the current enrollment. Not filtered by date or term — each placement carries its own term, so narrow the result yourself.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

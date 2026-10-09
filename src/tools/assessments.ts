@@ -33,7 +33,7 @@ export function registerAssessmentTools(server: McpServer, client: ICClient): vo
   server.registerTool('ic_list_assessments', {
     description:
       "List a student's standardized test scores (state, national, district tests). Auto-resolves calendarID from each of the student's enrollments and returns one entry per enrollment. The shape of individual test records varies by district and test type — fields are passed through unchanged.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

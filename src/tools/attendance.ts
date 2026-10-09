@@ -78,7 +78,7 @@ function processList(list: AttendanceEntry | AttendanceEntry[] | undefined, sinc
 export function registerAttendanceTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_attendance', {
     description: "List a student's absences and tardies (per-course summary grouped by term). Auto-resolves enrollmentID from the student record.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

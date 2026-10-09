@@ -9,7 +9,7 @@ export function registerDistrictTools(server: McpServer, client: ICClient): void
     inputSchema: z.object({
       view: viewArg(),
     }),
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
   }, async ({ view }) => {
     await client.ensureDiscovery();
     const data = client.listDistricts();

@@ -19,7 +19,14 @@
         "IC_DISTRICT": "${user_config.ic_district}",
         "IC_USERNAME": "${user_config.ic_username}",
         "IC_PASSWORD": "${user_config.ic_password}",
-        "IC_NAME": "${user_config.ic_name}"
+        "IC_NAME": "${user_config.ic_name}",
+        "IC_DISABLE_FETCHPROXY": "${user_config.ic_disable_fetchproxy}",
+        "IC_SESSION_CACHE": "${user_config.ic_session_cache}",
+        "IC_SESSION_FILE": "${user_config.ic_session_file}",
+        "IC_DOWNLOAD_DIR": "${user_config.ic_download_dir}",
+        "FETCHPROXY_WS_PORT": "${user_config.fetchproxy_ws_port}",
+        "FETCHPROXY_WS_HOST": "${user_config.fetchproxy_ws_host}",
+        "FETCHPROXY_IDENTITY_DIR": "${user_config.fetchproxy_identity_dir}"
       }
     }
   },
@@ -53,6 +60,50 @@
       "type": "string",
       "title": "Display name (optional)",
       "description": "Friendly name for the district (e.g. \"Springfield\"). Defaults to the district app name if not set.",
+      "required": false
+    },
+    "ic_disable_fetchproxy": {
+      "type": "boolean",
+      "title": "Disable ContextMint Bridge fallback (optional)",
+      "description": "Set to 1 to skip the ContextMint Bridge browser-extension fallback (missing creds become a hard error — useful in headless CI).",
+      "required": false,
+      "default": false
+    },
+    "ic_session_cache": {
+      "type": "boolean",
+      "title": "On-disk session cache (optional)",
+      "description": "Set to false to disable the on-disk session cache and re-authenticate on every process start. Defaults to enabled.",
+      "required": false,
+      "default": true
+    },
+    "ic_session_file": {
+      "type": "string",
+      "title": "Session cache file (optional)",
+      "description": "Absolute path for the session cache file. Defaults to $MCP_DATA_DIR/.infinitecampus-mcp/session-<district>.json.",
+      "required": false
+    },
+    "ic_download_dir": {
+      "type": "string",
+      "title": "Download directory (optional)",
+      "description": "Absolute path of the only directory ic_download_document may write into. Defaults to ~/Downloads.",
+      "required": false
+    },
+    "fetchproxy_ws_port": {
+      "type": "string",
+      "title": "ContextMint Bridge port (optional, advanced)",
+      "description": "Localhost concentrator port (default 37149). On one machine every MCP shares the concentrator, so move it for ALL of them or not at all.",
+      "required": false
+    },
+    "fetchproxy_ws_host": {
+      "type": "string",
+      "title": "ContextMint Bridge bind host (optional, advanced)",
+      "description": "Bind interface (default 127.0.0.1; a literal IP only, anything else is ignored). Keep on loopback — it exists for ONE topology: a hosted child in its own network namespace.",
+      "required": false
+    },
+    "fetchproxy_identity_dir": {
+      "type": "string",
+      "title": "ContextMint Bridge identity directory (optional, advanced)",
+      "description": "Where to store the long-term fetchproxy identity keypair (default ~/.fetchproxy/identity/; an absolute path only, anything else is ignored). Exists for a host that runs a separate child per caller, so they can share one identity.",
       "required": false
     }
   },

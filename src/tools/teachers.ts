@@ -52,7 +52,7 @@ function trimRecord<T extends Record<string, unknown>>(raw: T): Partial<T> {
 export function registerTeacherTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_teachers', {
     description: "List a student's teachers (per enrolled section) and assigned counselor(s). Combines two endpoints (section/contacts and studentCounselor/byUser). Response field shapes may vary slightly by district — core fields (firstName, lastName, email) are consistent; additional fields are passed through.",
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
