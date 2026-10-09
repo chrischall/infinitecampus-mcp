@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import { extractPlainTextFromHtml } from '@chrischall/mcp-utils/html';
+import { untrustedEnvelope, UNTRUSTED_DESCRIPTION_SUFFIX } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { toArray } from './_shared.js';
 
@@ -123,7 +124,8 @@ export function parseMessageHtml(
 export function registerMessageTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_messages', {
     description:
-      "List all parent-visible messages from three IC sources combined: (1) prism notifications (assignment alerts, grade postings, attendance alerts), (2) Messenger 2.0 inbox (teacher messages, district announcements with newMessage/actionRequired flags), and (3) portal userNotice announcements. Each section has its own count and items; if any source errors, that section contains an error field and the others still return normally. The `limit` arg caps the prism notifications only (the high-volume source). Note: listing inbox messages does not mark them as read in normal portal behavior, but some district configurations may update read-tracking; use ic_get_message for the full HTML body.",
+      "List all parent-visible messages from three IC sources combined: (1) prism notifications (assignment alerts, grade postings, attendance alerts), (2) Messenger 2.0 inbox (teacher messages, district announcements with newMessage/actionRequired flags), and (3) portal userNotice announcements. Each section has its own count and items; if any source errors, that section contains an error field and the others still return normally. The `limit` arg caps the prism notifications only (the high-volume source). Note: listing inbox messages does not mark them as read in normal portal behavior, but some district configurations may update read-tracking; use ic_get_message for the full HTML body. " +
+      UNTRUSTED_DESCRIPTION_SUFFIX,
     annotations: { readOnlyHint: true },
     inputSchema: z.object({ ...listArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
@@ -163,11 +165,14 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
 
     const [notifications, inbox, announcements] = await Promise.all([prismPromise, inboxPromise, noticePromise]);
 
-    return viewResponse((rawArgs as { view?: string }).view, { notifications, inbox, announcements });
+    // Teacher/district-authored text: fenced so the model reads it as data,
+    // never as instructions (fleet-audit#514). Markers lead the result.
+    return viewResponse((rawArgs as { view?: string }).view, untrustedEnvelope({ notifications, inbox, announcements }));
   });
 
   server.registerTool('ic_get_message', {
-    description: "Fetch the HTML body of an inbox message and return it parsed into { subject, date, body, url }. Takes a `messageUrl` which is the `url` field from an item returned by ic_list_messages' inbox section (e.g. 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=...'). Relative and /campus/-prefixed URLs are both accepted. Note: fetching the HTML body may mark the message as read on some district configurations; probe against an empty inbox could not confirm the side effect.",
+    description: "Fetch the HTML body of an inbox message and return it parsed into { subject, date, body, url }. Takes a `messageUrl` which is the `url` field from an item returned by ic_list_messages' inbox section (e.g. 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=...'). Relative and /campus/-prefixed URLs are both accepted. Note: fetching the HTML body may mark the message as read on some district configurations; probe against an empty inbox could not confirm the side effect. " +
+      UNTRUSTED_DESCRIPTION_SUFFIX,
     annotations: { readOnlyHint: true },
     inputSchema: z.object({ ...getArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
@@ -175,6 +180,6 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     const path = normalizeMessageUrl(args.messageUrl);
     const html = await client.request<string>(args.district, path, { responseType: 'text' });
     const parsed = parseMessageHtml(html ?? '', path);
-    return viewResponse((rawArgs as { view?: string }).view, parsed);
+    return viewResponse((rawArgs as { view?: string }).view, untrustedEnvelope(parsed));
   });
 }

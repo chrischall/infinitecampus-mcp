@@ -57,3 +57,17 @@ describe('ContextMint Bridge naming in user-facing config copy', () => {
     expect(src).not.toMatch(/\[via fetchproxy\]/i);
   });
 });
+
+// npm and the MCP registry publish package.json's description, and users and
+// client policies read it to judge what the server can change. No tool sends a
+// message or uploads a document — the only side effect is ic_download_document
+// writing a file locally — so the description must not claim a write surface
+// (chrischall/fleet-audit#513).
+describe('package description states the real write surface', () => {
+  it('does not claim message/document write support', () => {
+    const { description } = JSON.parse(read('package.json')) as { description: string };
+    expect(description).not.toMatch(/\bwrite\b/i);
+    expect(description).toMatch(/read-only/i);
+    expect(description).toMatch(/download/i);
+  });
+});

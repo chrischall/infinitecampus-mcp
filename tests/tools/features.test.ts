@@ -43,6 +43,32 @@ describe('ic_get_features', () => {
     expect(getFeatures).toHaveBeenCalledTimes(2);
   });
 
+  it('records a failing enrollment as { error } and keeps the others (fleet-audit#511)', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue([STUDENT] as never);
+    vi.spyOn(client, 'getFeatures').mockImplementation(async (_d, structureID) => {
+      if (structureID === 3918) throw new Error('IC 404 Not Found for /displayOptions');
+      return { attendance: true };
+    });
+    setup(client);
+    const result = await handlers.get('ic_get_features')!({ district: 'anoka', studentId: '481' });
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      { enrollmentID: 426960, structureID: 3917, schoolName: 'Springfield High School', features: { attendance: true } },
+      { enrollmentID: 426961, structureID: 3918, schoolName: 'Other School', error: 'IC 404 Not Found for /displayOptions' },
+    ]);
+  });
+
+  it('serializes a non-Error throwable from one enrollment as a string', async () => {
+    const client = new ICClient(account);
+    vi.spyOn(client, 'request').mockResolvedValue([{ ...STUDENT, enrollments: [STUDENT.enrollments[0]] }] as never);
+    vi.spyOn(client, 'getFeatures').mockRejectedValue('boom');
+    setup(client);
+    const result = await handlers.get('ic_get_features')!({ district: 'anoka', studentId: '481' });
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      { enrollmentID: 426960, structureID: 3917, schoolName: 'Springfield High School', error: 'boom' },
+    ]);
+  });
+
   it('returns StudentNotFound for unknown studentId', async () => {
     const client = new ICClient(account);
     vi.spyOn(client, 'request').mockResolvedValue([STUDENT] as never);
