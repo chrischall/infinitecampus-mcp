@@ -512,6 +512,18 @@ export class ICClient {
       // 3. For each linked account, get CUPS token and authenticate
       for (const linked of laData.accounts) {
         try {
+          // The linked district's login URL comes from the primary's JSON, not
+          // from config, so hold it to loadAccount's IC_BASE_URL rule before
+          // anything is sent to it: the CUPS token is POSTed there and its
+          // origin carries the linked session cookies for every later request.
+          // Checked before the token is minted, so a cleartext URL never even
+          // gets one. An unparseable URL throws into the catch below.
+          const loginUrl = new URL(linked.districtLoginUrl);
+          if (loginUrl.protocol !== 'https:') {
+            console.error(`[ic] CUPS: skipping ${linked.districtName} — its login URL is not https (${loginUrl.protocol})`);
+            continue;
+          }
+
           // Get CUPS login token
           const tokenRes = await fetch(
             `${account.baseUrl}/campus/api/campus/authentication/cups/loginToken`,
@@ -524,8 +536,7 @@ export class ICClient {
           if (!tokenRes.ok) { console.error(`[ic] CUPS loginToken failed for ${linked.districtName}`); continue; }
           const tokenData = await tokenRes.json() as { token: { token: string } };
 
-          // Extract base URL from districtLoginUrl
-          const linkedBaseUrl = new URL(linked.districtLoginUrl).origin;
+          const linkedBaseUrl = loginUrl.origin;
 
           // POST to linked district's verify.jsp with CUPS token
           const switchRes = await fetch(

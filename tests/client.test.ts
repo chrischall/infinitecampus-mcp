@@ -1168,6 +1168,51 @@ describe('ICClient — CUPS linked district discovery', () => {
     expect(linked).toEqual({ data: 'ok' });
   });
 
+  // SEC-1 (fleet-audit#1030): loadAccount refuses a non-https IC_BASE_URL, and
+  // a linked district discovered through CUPS must meet the same bar — its
+  // login URL comes from the primary's JSON, and both the CUPS token and every
+  // later request carrying the linked session cookies would go over cleartext.
+  it('skips a linked district whose districtLoginUrl is not https, before minting a CUPS token', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const insecure = { ...linkedAccount, districtName: 'plain', districtLoginUrl: 'http://plain.example.org/campus/verify.jsp' };
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [insecure, linkedAccount] }), { status: 200 });
+      }
+      return cupsHappyPathHandler()(url, init);
+    });
+
+    const client = new ICClient(primaryAccount);
+    await client.request('anoka', '/campus/api/test');
+
+    const names = client.listDistricts().map((d) => d.name);
+    expect(names).toEqual(['anoka', 'district2']);
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.startsWith('http://'))).toBe(false);
+    // One token for the https district, none for the cleartext one.
+    expect(urls.filter((u) => u.includes('/cups/loginToken'))).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('not https'));
+    errorSpy.mockRestore();
+  });
+
+  it('skips a linked district whose districtLoginUrl is not a URL at all', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const broken = { ...linkedAccount, districtName: 'broken', districtLoginUrl: 'not a url' };
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).includes('/cups/linkedAccounts')) {
+        return new Response(JSON.stringify({ accounts: [broken] }), { status: 200 });
+      }
+      return cupsHappyPathHandler()(url, init);
+    });
+
+    const client = new ICClient(primaryAccount);
+    await client.request('anoka', '/campus/api/test');
+
+    expect(client.listDistricts().map((d) => d.name)).toEqual(['anoka']);
+    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes('/cups/loginToken'))).toBe(false);
+    errorSpy.mockRestore();
+  });
+
   it('handles no linked accounts gracefully', async () => {
     fetchSpy.mockImplementation(async (url) => {
       const u = String(url);
