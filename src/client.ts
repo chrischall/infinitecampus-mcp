@@ -7,6 +7,7 @@ import {
   FileWriteRefusedError,
   parseCookieJar,
   truncateErrorMessage,
+  withAmbientCancellation,
   writeFileSafe,
 } from '@chrischall/mcp-utils';
 import { createCookieSessionManager, type CookieSessionManager } from '@chrischall/mcp-utils/session';
@@ -384,7 +385,7 @@ export class ICClient {
     // Credentials go in the urlencoded form body, NOT the URL query string —
     // query-string creds land in proxy/LB/server access logs even over HTTPS.
     // Mirrors the CUPS switch POST body construction against the same host.
-    const postRes = await fetch(
+    const postRes = await icFetch(
       `${account.baseUrl}/campus/verify.jsp?nonBrowser=true`,
       {
         method: 'POST',
@@ -463,7 +464,7 @@ export class ICClient {
       };
 
       // 1. Get linked accounts
-      const laRes = await fetch(
+      const laRes = await icFetch(
         `${account.baseUrl}/campus/api/campus/authentication/cups/linkedAccounts`,
         { headers: baseHeaders },
       );
@@ -499,8 +500,8 @@ export class ICClient {
 
       // 2. Get original district info (needed for all linked accounts)
       const [origRes, currRes] = await Promise.all([
-        fetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
-        fetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
+        icFetch(`${account.baseUrl}/campus/api/campus/user/userAccountSwitch/originalDistrict`, { headers: baseHeaders }),
+        icFetch(`${account.baseUrl}/campus/api/campus/districts/current`, { headers: baseHeaders }),
       ]);
       // Same shape as above: the session answered, so no re-mint — but
       // discovery did not complete, so no latch either, and a later call
@@ -525,7 +526,7 @@ export class ICClient {
           }
 
           // Get CUPS login token
-          const tokenRes = await fetch(
+          const tokenRes = await icFetch(
             `${account.baseUrl}/campus/api/campus/authentication/cups/loginToken`,
             {
               method: 'POST',
@@ -539,7 +540,7 @@ export class ICClient {
           const linkedBaseUrl = loginUrl.origin;
 
           // POST to linked district's verify.jsp with CUPS token
-          const switchRes = await fetch(
+          const switchRes = await icFetch(
             `${linked.districtLoginUrl}?nonBrowser=true&appName=${encodeURIComponent(linked.appName)}&portalLoginPage=parents`,
             {
               method: 'POST',
@@ -629,12 +630,12 @@ export class ICClient {
     // and replays exactly once. A bare ensure()+fetch left a stale session in
     // place, so every retry 401'd until some unrelated call refreshed it.
     const res = await this.managers.get(account.name)!.withSession(async (session) =>
-      fetch(url, {
+      icFetch(url, {
         headers: {
           Cookie: session.cookieHeader,
           ...(session.xsrfToken ? { 'X-XSRF-TOKEN': session.xsrfToken } : {}),
         },
-      }),
+      }, DOWNLOAD_TIMEOUT_MS),
     );
     if (!res.ok) {
       // A CDN/WAF refusal page (chrischall/mcp-host#1015) never reached IC, so
@@ -650,7 +651,7 @@ export class ICClient {
     if (res.status === 401) throw new SessionExpiredError(account.name);
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
-    const buf = new Uint8Array(await res.arrayBuffer());
+    const buf = await readCapped(res, path);
     await writeConfined(target.real, destinationPath, buf, !!opts.overwrite);
     return {
       path: target.requested,
@@ -667,7 +668,7 @@ export class ICClient {
     // invalidates this district, re-logs-in single-flight, and replays the
     // request EXACTLY once.
     const res = await mgr.withSession(async (session) =>
-      fetch(`${account.baseUrl}${path}`, {
+      icFetch(`${account.baseUrl}${path}`, {
         method: opts.method ?? 'GET',
         headers: {
           Cookie: session.cookieHeader,
@@ -886,6 +887,64 @@ export class DocumentOriginNotAllowedError extends Error {
     this.name = 'DocumentOriginNotAllowedError';
   }
 }
+/** Per-request ceiling for every IC call except a document download. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+/** Ceiling for a document download, which moves a whole file. */
+export const DOWNLOAD_TIMEOUT_MS = 120_000;
+/**
+ * Largest document download accepted. Report cards and transcripts are
+ * single-digit MB; anything past this is not a school document worth holding
+ * in memory before it is written.
+ */
+export const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * The one way this client calls Infinite Campus (fleet-audit#1026): every
+ * request carries a timeout, combined with the running tool call's cancel
+ * signal, so a stalled portal cannot hang a tool and a cancelled call stops
+ * its fetch instead of letting it run on.
+ */
+function icFetch(url: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+  return fetch(url, { ...init, signal: withAmbientCancellation(AbortSignal.timeout(timeoutMs)) });
+}
+
+/**
+ * Read a download body into memory, refusing it past {@link MAX_DOWNLOAD_BYTES}
+ * — up front from content-length when the server declares one, and otherwise
+ * by counting as it streams, so an oversized body is never fully buffered.
+ */
+async function readCapped(res: Response, path: string): Promise<Uint8Array> {
+  if (!res.body) return new Uint8Array(0);
+  if (Number(res.headers.get('content-length')) > MAX_DOWNLOAD_BYTES) {
+    await res.body.cancel();
+    throw new DownloadTooLargeError(path, MAX_DOWNLOAD_BYTES);
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_DOWNLOAD_BYTES) {
+      await reader.cancel();
+      throw new DownloadTooLargeError(path, MAX_DOWNLOAD_BYTES);
+    }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { buf.set(c, offset); offset += c.byteLength; }
+  return buf;
+}
+
+export class DownloadTooLargeError extends Error {
+  constructor(public path: string, public limit: number) {
+    super(`DownloadTooLarge: ${path} exceeds the ${limit / (1024 * 1024)} MB download limit`);
+    this.name = 'DownloadTooLargeError';
+  }
+}
+
 export class InvalidPathError extends Error {
   constructor(public path: string, reason = 'is a directory') {
     super(`InvalidPath: destinationPath must be a regular filename, but ${path} ${reason}`);

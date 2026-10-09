@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { ICClient, AuthFailedError } from '../src/client.js';
+import { ICClient, AuthFailedError, DownloadTooLargeError, MAX_DOWNLOAD_BYTES } from '../src/client.js';
+import { withCallSignal } from '@chrischall/mcp-utils';
 import type { Account } from '../src/config.js';
 
 const primaryAccount: Account = {
@@ -2449,5 +2450,83 @@ describe('ICClient restored-session recovery, in one call', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// BUG-1 (fleet-audit#1026): no IC request carried a timeout or the caller's
+// cancel signal, and download() buffered the whole body with no size cap.
+describe('ICClient — timeouts, cancellation and download cap', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function loginThen(final: () => Response) {
+    return vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockImplementationOnce(async () => final());
+  }
+
+  it('gives every fetch (login, discovery, request) an AbortSignal', async () => {
+    const fetchSpy = loginThen(() => new Response('{}', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    await client.request('anoka', '/campus/api/x');
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    for (const call of fetchSpy.mock.calls) {
+      expect((call[1] as RequestInit).signal, String(call[0])).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it("aborts the in-flight request when the caller cancels the tool call", async () => {
+    let seen: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockImplementationOnce(async (_u, init) => {
+        seen = (init as RequestInit).signal ?? undefined;
+        return new Response('{}', { status: 200 });
+      });
+    const ac = new AbortController();
+    const client = new ICClient(primaryAccount);
+    await withCallSignal(ac.signal, () => client.request('anoka', '/campus/api/x'));
+    expect(seen!.aborted).toBe(false);
+    ac.abort();
+    expect(seen!.aborted).toBe(true);
+  });
+
+  describe('download size cap', () => {
+    let dir: string;
+    beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-cap-')); });
+    afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+    it('refuses a body whose content-length exceeds the cap, writing nothing', async () => {
+      loginThen(() => new Response(new Uint8Array([1]), {
+        status: 200, headers: { 'content-length': String(MAX_DOWNLOAD_BYTES + 1) },
+      }));
+      const dest = join(dir, 'big.pdf');
+      await expect(new ICClient(primaryAccount).download('anoka', '/campus/doc', dest))
+        .rejects.toBeInstanceOf(DownloadTooLargeError);
+      await expect(stat(dest)).rejects.toThrow();
+    });
+
+    it('stops reading a streamed body once it passes the cap, writing nothing', async () => {
+      const chunk = new Uint8Array(1024 * 1024);
+      let pulled = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(c) { pulled++; c.enqueue(chunk); },
+      });
+      loginThen(() => new Response(stream, { status: 200 }));
+      const dest = join(dir, 'stream.pdf');
+      await expect(new ICClient(primaryAccount).download('anoka', '/campus/doc', dest))
+        .rejects.toThrow(/exceeds/);
+      await expect(stat(dest)).rejects.toThrow();
+      expect(pulled).toBeLessThanOrEqual(MAX_DOWNLOAD_BYTES / chunk.byteLength + 3);
+    });
+
+    it('writes an empty file for a body-less 200', async () => {
+      loginThen(() => new Response(null, { status: 200 }));
+      const dest = join(dir, 'empty.pdf');
+      const meta = await new ICClient(primaryAccount).download('anoka', '/campus/doc', dest);
+      expect(meta.bytes).toBe(0);
+      expect((await readFile(dest)).length).toBe(0);
+    });
   });
 });
