@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.10](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.9...v3.1.10) (2026-10-10)
+
+
+### Documentation
+
+* make AGENTS.md a symlink to CLAUDE.md ([#249](https://github.com/chrischall/infinitecampus-mcp/issues/249)) ([c75aba2](https://github.com/chrischall/infinitecampus-mcp/commit/c75aba28ae445505afe4ba6a955371367c21498a))
+
 ## [3.1.9](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.8...v3.1.9) (2026-10-09)
 
 

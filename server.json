@@ -6,12 +6,12 @@
     "url": "https://github.com/chrischall/infinitecampus-mcp",
     "source": "github"
   },
-  "version": "3.1.9",
+  "version": "3.1.10",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "infinitecampus-mcp",
-      "version": "3.1.9",
+      "version": "3.1.10",
       "transport": {
         "type": "stdio"
       },
