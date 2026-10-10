@@ -1,7 +1,7 @@
 {
   "dxt_version": "0.1",
   "name": "infinitecampus-mcp",
-  "version": "3.1.9",
+  "version": "3.1.10",
   "description": "Infinite Campus (Campus Parent) MCP — single-account with CUPS auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via the ContextMint Bridge browser extension.",
   "author": {
     "name": "Claude Code (AI)"
