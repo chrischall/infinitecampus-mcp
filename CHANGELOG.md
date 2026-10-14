@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.2.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.9...v3.2.0) (2026-10-14)
+
+
+### Features
+
+* **calendar:** restore school-day labels and report the Campus version ([#255](https://github.com/chrischall/infinitecampus-mcp/issues/255)) ([33b9ffe](https://github.com/chrischall/infinitecampus-mcp/commit/33b9ffea9d4dacd61899ec1a96ee567bbcdb88a4))
+
+
+### Bug Fixes
+
+* **calendar:** fall back to calendar/day when instructionalDay 500s ([#254](https://github.com/chrischall/infinitecampus-mcp/issues/254)) ([1a10b31](https://github.com/chrischall/infinitecampus-mcp/commit/1a10b31d1812a3f848d28e6b08ef449a89d84da7))
+* **client:** stop failed requests waiting on an unreadable Campus version ([#257](https://github.com/chrischall/infinitecampus-mcp/issues/257)) ([aed7ccd](https://github.com/chrischall/infinitecampus-mcp/commit/aed7ccdd9058f5ebdd60bc2b6a8eae96444ac8d0))
+* **deps:** bump the production-dependencies group with 2 updates ([#252](https://github.com/chrischall/infinitecampus-mcp/issues/252)) ([605d7a3](https://github.com/chrischall/infinitecampus-mcp/commit/605d7a3738148f828446a3ebaebbbca5f54be711))
+
+
+### Documentation
+
+* make AGENTS.md a symlink to CLAUDE.md ([#249](https://github.com/chrischall/infinitecampus-mcp/issues/249)) ([c75aba2](https://github.com/chrischall/infinitecampus-mcp/commit/c75aba28ae445505afe4ba6a955371367c21498a))
+
 ## [3.1.9](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.8...v3.1.9) (2026-10-09)
 
 
