@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { ICClient, AuthFailedError, DownloadTooLargeError, MAX_DOWNLOAD_BYTES, PortalUnreachableError, parseCampusVersion } from '../src/client.js';
+import { ICClient, AuthFailedError, DownloadTooLargeError, MAX_DOWNLOAD_BYTES, PortalUnreachableError, parseCampusVersion, VERSION_RETRY_MS, VERSION_TIMEOUT_MS } from '../src/client.js';
 import { withCallSignal } from '@chrischall/mcp-utils';
 import type { Account } from '../src/config.js';
 
@@ -2586,13 +2586,45 @@ describe('ICClient.campusVersion', () => {
     expect(JSON.stringify(init?.headers ?? {})).not.toMatch(/cookie/i);
   });
 
-  it('is null on a non-ok page, and asks again next time', async () => {
+  // A failed read is remembered for VERSION_RETRY_MS: request() reads the
+  // version on every 5xx, and re-fetching an unreadable page each time would
+  // add a round trip to every call that has already failed (#256).
+  it('is null on a non-ok page, and does not ask again until the retry window passes', async () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 503 }))
       .mockResolvedValueOnce(new Response('Version:Campus-2635.16', { status: 200 }));
+    const realNow = Date.now();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(realNow);
     const client = new ICClient(primaryAccount);
     expect(await client.campusVersion('anoka')).toBeNull();
+    now.mockReturnValue(realNow + VERSION_RETRY_MS - 1);
+    expect(await client.campusVersion('anoka')).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(realNow + VERSION_RETRY_MS);
     expect(await client.campusVersion('anoka')).toBe('2635.16');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads the page on a short timeout, not the 30s request timeout', async () => {
+    fetchSpy.mockResolvedValue(new Response('Version:Campus-2635.16', { status: 200 }));
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const client = new ICClient(primaryAccount);
+    await client.campusVersion('anoka');
+    expect(timeout).toHaveBeenCalledWith(VERSION_TIMEOUT_MS);
+    expect(VERSION_TIMEOUT_MS).toBeLessThanOrEqual(5_000);
+  });
+
+  it('a 5xx after a failed version read does not read the page again', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(new Response('', { status: 503 })) // version page
+      .mockResolvedValueOnce(new Response('', { status: 500 }));
+    const client = new ICClient(primaryAccount);
+    await expect(client.request('anoka', '/x')).rejects.toBeInstanceOf(PortalUnreachableError);
+    await expect(client.request('anoka', '/x')).rejects.toBeInstanceOf(PortalUnreachableError);
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
   });
 
   it('is null when the fetch throws', async () => {

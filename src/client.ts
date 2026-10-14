@@ -69,8 +69,10 @@ export class ICClient {
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
   private primaryName: string;
   private featuresCache = new Map<string, { data: DisplayOptions; fetchedAt: number }>();
-  /** Campus version per district, read once. A failed read is dropped so the next call retries. */
+  /** Campus version per district, read once. A failed read is dropped, to be retried after VERSION_RETRY_MS. */
   private versions = new Map<string, Promise<string | null>>();
+  /** When each district's last version read failed — see VERSION_RETRY_MS. */
+  private versionFailedAt = new Map<string, number>();
   /**
    * True when the primary account has empty creds (fetchproxy mode). The
    * client uses pre-loaded cookies in place of the `verify.jsp` POST and
@@ -320,10 +322,15 @@ export class ICClient {
   campusVersion(district: string): Promise<string | null> {
     const account = this.accounts.get(district);
     if (!account) return Promise.resolve(null);
+    const failedAt = this.versionFailedAt.get(account.name);
+    if (failedAt !== undefined && Date.now() - failedAt < VERSION_RETRY_MS) return Promise.resolve(null);
     let pending = this.versions.get(account.name);
     if (!pending) {
       pending = fetchCampusVersion(account).then((v) => {
-        if (v === null) this.versions.delete(account.name);
+        if (v === null) {
+          this.versions.delete(account.name);
+          this.versionFailedAt.set(account.name, Date.now());
+        }
         return v;
       });
       this.versions.set(account.name, pending);
@@ -914,7 +921,11 @@ export function parseCampusVersion(html: string): string | null {
 
 async function fetchCampusVersion(account: Account): Promise<string | null> {
   try {
-    const res = await icFetch(`${account.baseUrl}/campus/portal/parents/${encodeURIComponent(account.district)}.jsp`);
+    const res = await icFetch(
+      `${account.baseUrl}/campus/portal/parents/${encodeURIComponent(account.district)}.jsp`,
+      {},
+      VERSION_TIMEOUT_MS,
+    );
     if (!res.ok) return null;
     return parseCampusVersion(await res.text());
   } catch {
@@ -941,6 +952,13 @@ export class DocumentOriginNotAllowedError extends Error {
 }
 /** Per-request ceiling for every IC call except a document download. */
 export const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * The Campus version read rides on failures (request() reads it on every 5xx),
+ * so it must not add the full request timeout to a call that already failed.
+ */
+export const VERSION_TIMEOUT_MS = 5_000;
+/** How long a failed version read is remembered before the page is read again. */
+export const VERSION_RETRY_MS = 5 * 60 * 1000;
 /** Ceiling for a document download, which moves a whole file. */
 export const DOWNLOAD_TIMEOUT_MS = 120_000;
 /**
