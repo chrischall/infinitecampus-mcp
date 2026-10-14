@@ -97,6 +97,8 @@ Two calls per enrollment, then join term windows to days client-side:
 ```sh
 ic_get "/campus/resources/term?structureID=$STRUCTURE_ID" | jq .          # term boundaries
 ic_get "/campus/resources/calendar/instructionalDay?calendarID=$CALENDAR_ID" | jq .  # day list
+# some districts 500 on instructionalDay (#253) — same days via calendar/day:
+ic_get "/campus/resources/calendar/day?calendarID=$CALENDAR_ID" | jq '[.[] | select(.isInstructionalDay)]'
 
 # days within term N's [startDate,endDate]:
 jq --slurpfile terms terms.json --arg t "$TERM_ID" \

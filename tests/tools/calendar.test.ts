@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/server';
-import { ICClient } from '../../src/client.js';
+import { ICClient, PortalUnreachableError, SessionExpiredError } from '../../src/client.js';
 import { registerCalendarTools } from '../../src/tools/calendar.js';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }> }>;
@@ -169,5 +169,77 @@ describe('ic_list_school_days', () => {
     expect(data[0].terms.map((t: { termName: string }) => t.termName)).toEqual(['Q1', 'Q2', 'Q3', 'Q4']);
     expect(data[0].terms[0].days).toHaveLength(1);
     expect(data[0].terms[1].days).toHaveLength(0);
+  });
+
+  // Issue #253: some districts now 500 on calendar/instructionalDay — Campus
+  // routes it as calendar/{calendarID} and reads "instructionalDay" as the ID.
+  describe('instructionalDay fallback (#253)', () => {
+    const http500 = () => Promise.reject(new PortalUnreachableError('anoka', 500));
+    const http404 = () => Promise.reject(new Error('IC 404 Not Found for /campus/resources/calendar/day'));
+    // calendar/day lists every calendar day; only isInstructionalDay ones count.
+    const ALL_DAYS = [
+      { date: '2025-08-20', isInstructionalDay: false, requiresAttendance: false, isSchoolDay: true },
+      { date: '2025-08-25', isInstructionalDay: true, requiresAttendance: true, isSchoolDay: true },
+      { date: '2025-10-15', isInstructionalDay: true, requiresAttendance: true, isSchoolDay: true },
+      { date: '2025-11-27', isInstructionalDay: false, requiresAttendance: false, isSchoolDay: false },
+      { date: '2026-03-15', isInstructionalDay: true, requiresAttendance: false, isSchoolDay: true },
+    ];
+
+    function impl(instructional: () => Promise<unknown>, day: () => Promise<unknown>) {
+      return (path: string) => {
+        if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+        if (path.includes('/resources/term?structureID=3917')) return Promise.resolve(TERMS);
+        if (path === '/campus/resources/calendar/instructionalDay?calendarID=5592') return instructional();
+        if (path === '/campus/resources/calendar/day?calendarID=5592') return day();
+        throw new Error('Unexpected path: ' + path);
+      };
+    }
+
+    async function run(i: () => Promise<unknown>, d: () => Promise<unknown>, args: Record<string, unknown> = {}) {
+      setup(impl(i, d));
+      const result = await handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345', ...args });
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('falls back to calendar/day (instructional days only) when instructionalDay 500s', async () => {
+      const data = await run(http500, () => Promise.resolve(ALL_DAYS));
+      expect(data[0].warning).toBeUndefined();
+      const days = data[0].terms.flatMap((t: { days: unknown[] }) => t.days);
+      expect(days).toEqual([
+        { date: '2025-08-25', requiresAttendance: true },
+        { date: '2025-10-15', requiresAttendance: true },
+        { date: '2026-03-15', requiresAttendance: false },
+      ]);
+    });
+
+    it('falls back to calendar/day when instructionalDay 404s', async () => {
+      const data = await run(http404, () => Promise.resolve(ALL_DAYS));
+      expect(data[0].terms[0].days.map((d: { date: string }) => d.date)).toEqual(['2025-08-25', '2025-10-15']);
+    });
+
+    it('returns terms with a SchoolDaysUnavailable warning when both day endpoints fail', async () => {
+      const data = await run(http500, http404);
+      expect(data[0]).toMatchObject({ enrollmentID: 426960, warning: 'SchoolDaysUnavailable' });
+      expect(data[0].terms.map((t: { termName: string }) => t.termName)).toEqual(['Q1', 'Q2', 'Q3', 'Q4']);
+      expect(data[0].terms.every((t: { days: unknown[] }) => t.days.length === 0)).toBe(true);
+    });
+
+    it('when days are unavailable, since/until keeps the terms that overlap the range', async () => {
+      const data = await run(http500, http500, { since: '2026-02-01', until: '2026-05-31' });
+      expect(data[0].warning).toBe('SchoolDaysUnavailable');
+      expect(data[0].terms.map((t: { termName: string }) => t.termName)).toEqual(['Q3', 'Q4']);
+    });
+
+    it('does not mask a session error on instructionalDay as a fallback', async () => {
+      setup(impl(() => Promise.reject(new SessionExpiredError('anoka')), () => Promise.resolve(ALL_DAYS)));
+      await expect(handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' }))
+        .rejects.toBeInstanceOf(SessionExpiredError);
+    });
+
+    it('does not mask a session error on the calendar/day fallback', async () => {
+      setup(impl(http500, () => Promise.reject(new SessionExpiredError('anoka'))));
+      await expect(handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' }))
+        .rejects.toBeInstanceOf(SessionExpiredError);
+    });
   });
 });
