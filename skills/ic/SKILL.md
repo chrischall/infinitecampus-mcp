@@ -96,7 +96,8 @@ registered even when the server is unconfigured (every other tool is not), and
 it reports whether the configured `IC_DISTRICT` is one the account is actually
 LINKED to. A district you are not linked to fails every other tool for a reason
 that looks nothing like "wrong district", so run this first when things fail
-inexplicably. Most student-scoped tools also take `studentId` (the personID from `ic_list_students`).
+inexplicably. It also reports each district's Campus version (`campus_version`,
+e.g. `2635.16`) — quote it in any bug report about an endpoint that changed. Most student-scoped tools also take `studentId` (the personID from `ic_list_students`).
 
 ## Tools
 
@@ -119,7 +120,7 @@ inexplicably. Most student-scoped tools also take `studentId` (the personID from
 ### Daily life
 | Tool | Notes |
 |------|-------|
-| `ic_list_school_days(district, studentId, view?)` | Instructional calendar with term boundaries. |
+| `ic_list_school_days(district, studentId, since?, until?, view?)` | Instructional calendar with term boundaries; labelled days carry `comments`, and each enrollment lists its `daysOff` (holidays, workdays, breaks — including ones between terms). `warning: 'SchoolDaysUnavailable'` means the district wouldn't serve the day list; terms and `daysOff` still come back. |
 | `ic_list_attendance(district, studentId, since?, until?, view?)` | Per-course attendance summary grouped by term. |
 | `ic_list_attendance_events(district, studentId, since?, until?, excusedOnly?, view?)` | Individual absence/tardy events with codes and human comments. |
 | `ic_list_behavior(district, studentId, since?, until?, view?)` | Returns a `FeatureDisabled` warning if the district has no behavior module enabled — this is not an error. |

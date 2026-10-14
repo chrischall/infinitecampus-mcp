@@ -69,6 +69,8 @@ export class ICClient {
   private linkedTo = new Map<string, string>(); // linkedDistrictName → primaryDistrictName
   private primaryName: string;
   private featuresCache = new Map<string, { data: DisplayOptions; fetchedAt: number }>();
+  /** Campus version per district, read once. A failed read is dropped so the next call retries. */
+  private versions = new Map<string, Promise<string | null>>();
   /**
    * True when the primary account has empty creds (fetchproxy mode). The
    * client uses pre-loaded cookies in place of the `verify.jsp` POST and
@@ -298,7 +300,35 @@ export class ICClient {
   async request<T>(district: string, path: string, opts: RequestOpts = {}): Promise<T> {
     const account = await this.resolveAccount(district);
     await this.managers.get(account.name)!.ensure();
-    return this.doRequest<T>(account, path, opts);
+    try {
+      return await this.doRequest<T>(account, path, opts);
+    } catch (e) {
+      // A 5xx is the failure most likely to be a Campus release changing
+      // behaviour under us (#253), so it carries the version into the report.
+      if (e instanceof PortalUnreachableError) e.setCampusVersion(await this.campusVersion(account.name));
+      throw e;
+    }
+  }
+
+  /**
+   * The district's Campus version (e.g. "2635.16"), or null when it cannot be
+   * read. DIAGNOSTIC ONLY — nothing chooses behaviour by it. The only place IC
+   * states it is the parent login page footer ("Version:Campus-2635.16"),
+   * which needs no session, so this works in fetchproxy mode too and never
+   * touches a district's cookies.
+   */
+  campusVersion(district: string): Promise<string | null> {
+    const account = this.accounts.get(district);
+    if (!account) return Promise.resolve(null);
+    let pending = this.versions.get(account.name);
+    if (!pending) {
+      pending = fetchCampusVersion(account).then((v) => {
+        if (v === null) this.versions.delete(account.name);
+        return v;
+      });
+      this.versions.set(account.name, pending);
+    }
+    return pending;
   }
 
   /**
@@ -864,9 +894,31 @@ export class AuthFailedError extends Error {
 }
 
 export class PortalUnreachableError extends Error {
+  /** The district's Campus version, when it could be read — for bug reports. */
+  public campusVersion?: string;
   constructor(public district: string, public status: number) {
     super(`Portal unreachable for district '${district}' (status ${status})`);
     this.name = 'PortalUnreachableError';
+  }
+  setCampusVersion(version: string | null): void {
+    if (version === null) return;
+    this.campusVersion = version;
+    this.message += ` [Campus ${version}]`;
+  }
+}
+
+/** The version from a Campus login page footer ("Version:Campus-2635.16"), or null. */
+export function parseCampusVersion(html: string): string | null {
+  return /Version:\s*Campus-([0-9][\w.-]*)/.exec(html)?.[1] ?? null;
+}
+
+async function fetchCampusVersion(account: Account): Promise<string | null> {
+  try {
+    const res = await icFetch(`${account.baseUrl}/campus/portal/parents/${encodeURIComponent(account.district)}.jsp`);
+    if (!res.ok) return null;
+    return parseCampusVersion(await res.text());
+  } catch {
+    return null;
   }
 }
 

@@ -21,7 +21,7 @@ Status legend: ✅ shipped · 🚧 planned · ⏸️ deferred · 🚫 skipped ·
 | `ic_get_schedule` | `GET /campus/resources/portal/roster?personID=X` | ✅ Returns courses with section placements |
 | `ic_list_assignments` | `GET /campus/api/portal/assignment/listView?personID=X[&sectionID=Y]` | ✅ `sectionID` is the only server-side filter; date/state filters are ignored by the server so we apply client-side |
 | `ic_list_grades` | `GET /campus/resources/portal/grades?personID=X[&termID=Y]` | ✅ |
-| `ic_list_school_days` | `GET /campus/api/portal/students` + `/campus/resources/term?structureID=X` + `/campus/resources/calendar/instructionalDay?calendarID=Y` (fallback: `/campus/resources/calendar/day?calendarID=Y` filtered to `isInstructionalDay`) | ✅ Grades-shaped: enrollment → terms → days. Some districts 500 on `instructionalDay` since ~2026-10-12 (#253); `calendar/day` returns the same instructional days plus the non-instructional ones. If both fail, terms come back with `warning: 'SchoolDaysUnavailable'` and no days. |
+| `ic_list_school_days` | `GET /campus/api/portal/students` + `/campus/resources/term?structureID=X` + `/campus/resources/calendar/instructionalDay?calendarID=Y` (fallback: `/campus/resources/calendar/day?calendarID=Y` filtered to `isInstructionalDay`) | ✅ Grades-shaped: enrollment → terms → days. Some districts 500 on `instructionalDay` since ~2026-10-12 (#253); `calendar/day` returns the same instructional days plus the non-instructional ones. Whichever route last answered is tried first for the rest of the process. If both fail, terms come back with `warning: 'SchoolDaysUnavailable'` (plus `campusVersion`) and no days. Labels come from `/campus/resources/portal/dayEvent/byEnrollment?personID=X` (one call per student): event `name`s become a day's `comments`, and events with `instruction: false` become the enrollment's `daysOff` — neither day route carries `comments` any more (2026-10). |
 | `ic_list_attendance` | `GET /campus/resources/portal/attendance/{enrollmentID}?courseSummary=true&personID=X` | ✅ Auto-resolves enrollmentID from `ic_list_students`. Returns per-course/term summary with absent/tardy/present/earlyRelease lists. Trims lists by since/until client-side. Each list entry's `sectionPlacements` is trimmed to `{ periodName, startTime, endTime }` (the parent course already carries the rest). Short-circuits via `displayOptions.attendance` when disabled. |
 | `ic_list_attendance_events` | `GET /campus/resources/portal/attendance/events?enrollmentID=X&personID=X` | ✅ Individual absence/tardy events with code, description, excuse, human comments. Auto-resolves enrollmentID; supports since/until/excusedOnly filters. Each event's `sectionPlacements` is trimmed to `{ periodName, startTime, endTime }`. Short-circuits via `displayOptions.attendance` when disabled. |
 | `ic_list_behavior` | `GET /campus/resources/portal/behavior?personID=X` | ⚠️ Unknown real path; short-circuits via `displayOptions.behavior` when disabled, 404 backstop otherwise |
@@ -66,7 +66,6 @@ Useful only if a specific kid uses the feature. All would auto-detect via `displ
 | `GET /campus/api/portal/studentParticipation/attendanceInfo?date=X&personID=X` | Virtual learning check-ins. Data is thin (just `hasCheckIns`, `isVirtual`) and covered by attendance events. |
 | `GET /campus/api/portal/requiredActions/portalLogin` | Returns a single boolean `olrRequired` (Online Registration pending). Too narrow for a tool. |
 | `GET /campus/api/portal/crossSite/instructionalDay?structureID=X&personID=X` | Cross-site enrollments only (rare). Regular instructionalDay endpoint covers the common case. |
-| `GET /campus/resources/portal/dayEvent/byEnrollment?personID=X` | Day labels (`name`, `code`, e.g. "Annual Leave"). As of 2026-10 neither `instructionalDay` nor `calendar/day` carries `comments`, so this is now the only source of those labels — not yet shipped. |
 | Academic Planner (graduation progress) | Uses the legacy prism API style (`portal.PortalAcademicPlanner-*`), Springfield only. Grades tool already shows progress toward term GPAs. |
 | `GET /campus/resources/portal/attendance/events` (Messenger 2.0 replies) | No response/reply endpoint discovered that works for parents. Districts route responses through other systems (email, phone, ParentSquare). |
 
@@ -89,3 +88,18 @@ Candidates to investigate later:
 - Student-scoped tools take `studentId: string` (the `personID` from `ic_list_students`).
 - Enrollment-scoped data is resolved inside the tool from `studentId` → student's primary enrollment → `enrollmentID` / `calendarID` / `structureID`.
 - When an endpoint is known to be disabled per district, we prefer `displayOptions`-based early return over 404-catch-and-fallback. The 404 fallback remains as a backstop for undetectable cases.
+
+## Campus version
+
+IC exposes its version in exactly one place found so far: the footer of the
+parent login page, `GET /campus/portal/parents/{appName}.jsp` (no session
+needed) — `Version:Campus-2635.16`. `ICClient.campusVersion()` reads it once
+per district. It is **diagnostic only**: `ic_healthcheck` reports it per
+district, and it rides on `SchoolDaysUnavailable` warnings and on
+`PortalUnreachableError` from data requests. Nothing selects behaviour by
+version — route choice is by trying the route (see `ic_list_school_days`),
+because the version that changed `instructionalDay` (#253) is not known, and a
+version gate built on a scraped footer fails silently when the page changes.
+No version endpoint exists: `/campus/resources/version`, `/campus/api/version`,
+`/campus/version.jsp`, `/campus/resources/system/version`,
+`/campus/api/portal/version` all 404, and responses carry no version header.
