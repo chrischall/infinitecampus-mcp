@@ -94,7 +94,8 @@ Candidates to investigate later:
 IC exposes its version in exactly one place found so far: the footer of the
 parent login page, `GET /campus/portal/parents/{appName}.jsp` (no session
 needed) — `Version:Campus-2635.16`. `ICClient.campusVersion()` reads it once
-per district. It is **diagnostic only**: `ic_healthcheck` reports it per
+per district, on a 5s timeout; a failed read is remembered for 5 minutes, since
+the read rides on every 5xx and must not add a round trip to each one (#256). It is **diagnostic only**: `ic_healthcheck` reports it per
 district, and it rides on `SchoolDaysUnavailable` warnings and on
 `PortalUnreachableError` from data requests. Nothing selects behaviour by
 version — route choice is by trying the route (see `ic_list_school_days`),
