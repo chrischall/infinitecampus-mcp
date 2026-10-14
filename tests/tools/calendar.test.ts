@@ -11,6 +11,7 @@ let handlers: Map<string, ToolHandler>;
 function setup(impl: (path: string) => Promise<unknown>) {
   const client = new ICClient(account);
   vi.spyOn(client, 'request').mockImplementation(async (_d: string, path: string) => impl(path));
+  vi.spyOn(client, 'campusVersion').mockResolvedValue('2635.16');
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();
   vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
@@ -49,8 +50,27 @@ const DAYS = [
   { date: '2026-05-01', requiresAttendance: true, comments: null },
 ];
 
+// dayEvent/byEnrollment: one group per enrollment, labels for dates on the
+// calendar. Most land on days OFF (instruction: false) — the instructional day
+// list no longer carries comments at all, so these are the only labels.
+const DAY_EVENTS = [
+  {
+    crossSiteEnrollment: false, structureID: 3917, displayName: '25-26 Springfield HS',
+    events: [
+      { calendarID: 5592, date: '2026-03-15', name: 'Early Release Day', code: 'ER', instruction: true },
+      { calendarID: 5592, date: '2025-11-27', name: 'Holiday', code: 'HO', instruction: false },
+      { calendarID: 5592, date: '2025-11-27', name: 'Thanksgiving', code: 'TG', instruction: false },
+      { calendarID: 5592, date: '2026-04-06', name: 'Spring Break', code: 'SB', instruction: false },
+      // another calendar's event is not this enrollment's
+      { calendarID: 9999, date: '2025-11-28', name: 'Other calendar', code: 'X', instruction: false },
+    ],
+  },
+];
+const DAY_EVENT_PATH = '/campus/resources/portal/dayEvent/byEnrollment?personID=12345';
+
 function defaultImpl(path: string) {
   if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+  if (path === DAY_EVENT_PATH) return Promise.resolve(DAY_EVENTS);
   if (path.includes('/resources/term?structureID=3917')) return Promise.resolve(TERMS);
   if (path.includes('/resources/calendar/instructionalDay?calendarID=5592')) return Promise.resolve(DAYS);
   throw new Error('Unexpected path: ' + path);
@@ -157,6 +177,7 @@ describe('ic_list_school_days', () => {
     setup((path) => {
       if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
       if (path.includes('/resources/term?structureID=3917')) return Promise.resolve(TERMS);
+      if (path === DAY_EVENT_PATH) return Promise.resolve([]);
       if (path.includes('/resources/calendar/instructionalDay?calendarID=5592')) {
         // days only in Q1
         return Promise.resolve([{ date: '2025-08-25', requiresAttendance: true, comments: null }]);
@@ -188,6 +209,7 @@ describe('ic_list_school_days', () => {
     function impl(instructional: () => Promise<unknown>, day: () => Promise<unknown>) {
       return (path: string) => {
         if (path === '/campus/api/portal/students') return Promise.resolve([STUDENT]);
+        if (path === DAY_EVENT_PATH) return Promise.resolve([]);
         if (path.includes('/resources/term?structureID=3917')) return Promise.resolve(TERMS);
         if (path === '/campus/resources/calendar/instructionalDay?calendarID=5592') return instructional();
         if (path === '/campus/resources/calendar/day?calendarID=5592') return day();
@@ -219,7 +241,7 @@ describe('ic_list_school_days', () => {
 
     it('returns terms with a SchoolDaysUnavailable warning when both day endpoints fail', async () => {
       const data = await run(http500, http404);
-      expect(data[0]).toMatchObject({ enrollmentID: 426960, warning: 'SchoolDaysUnavailable' });
+      expect(data[0]).toMatchObject({ enrollmentID: 426960, warning: 'SchoolDaysUnavailable', campusVersion: '2635.16' });
       expect(data[0].terms.map((t: { termName: string }) => t.termName)).toEqual(['Q1', 'Q2', 'Q3', 'Q4']);
       expect(data[0].terms.every((t: { days: unknown[] }) => t.days.length === 0)).toBe(true);
     });
@@ -238,6 +260,142 @@ describe('ic_list_school_days', () => {
 
     it('does not mask a session error on the calendar/day fallback', async () => {
       setup(impl(http500, () => Promise.reject(new SessionExpiredError('anoka'))));
+      await expect(handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' }))
+        .rejects.toBeInstanceOf(SessionExpiredError);
+    });
+
+    it('omits campusVersion from the warning when the version cannot be read', async () => {
+      const client = setup(impl(http500, http500));
+      vi.mocked(client.campusVersion).mockResolvedValue(null);
+      const result = await handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' });
+      const data = JSON.parse(result.content[0].text);
+      expect(data[0].warning).toBe('SchoolDaysUnavailable');
+      expect('campusVersion' in data[0]).toBe(false);
+    });
+
+    // Once a district has answered on calendar/day, asking instructionalDay
+    // first on every call is one guaranteed-failing request per enrollment.
+    it('remembers the working route: a later call goes straight to calendar/day', async () => {
+      const client = setup(impl(http500, () => Promise.resolve(ALL_DAYS)));
+      const call = () => handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' });
+      await call();
+      const request = vi.mocked(client.request);
+      request.mockClear();
+      await call();
+      const paths = request.mock.calls.map((c) => c[1]);
+      expect(paths).toContain('/campus/resources/calendar/day?calendarID=5592');
+      expect(paths).not.toContain('/campus/resources/calendar/instructionalDay?calendarID=5592');
+    });
+
+    it('falls back to instructionalDay again when the remembered route stops working', async () => {
+      let dayWorks = true;
+      const client = setup(impl(
+        () => (dayWorks ? http500() : Promise.resolve(DAYS)),
+        () => (dayWorks ? Promise.resolve(ALL_DAYS) : http500()),
+      ));
+      const call = async () => JSON.parse((await handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' })).content[0].text);
+      await call();
+      dayWorks = false;
+      const data = await call();
+      expect(data[0].warning).toBeUndefined();
+      expect(data[0].terms[0].days[0].date).toBe('2025-08-25');
+      // ...and having recovered on instructionalDay, the next call starts there.
+      vi.mocked(client.request).mockClear();
+      await call();
+      const paths = vi.mocked(client.request).mock.calls.map((c) => c[1]);
+      expect(paths).not.toContain('/campus/resources/calendar/day?calendarID=5592');
+    });
+
+    it('does not remember a route when neither answers', async () => {
+      const client = setup(impl(http500, http500));
+      const call = () => handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' });
+      await call();
+      vi.mocked(client.request).mockClear();
+      await call();
+      const paths = vi.mocked(client.request).mock.calls.map((c) => c[1]);
+      expect(paths.indexOf('/campus/resources/calendar/instructionalDay?calendarID=5592'))
+        .toBeLessThan(paths.indexOf('/campus/resources/calendar/day?calendarID=5592'));
+    });
+  });
+
+  // Since 2026-10 neither day route carries `comments`; the labels live in
+  // portal/dayEvent/byEnrollment, mostly on days that are not instructional.
+  describe('day labels from dayEvent', () => {
+    async function run(args: Record<string, unknown> = {}, impl: (path: string) => Promise<unknown> = defaultImpl) {
+      setup(impl);
+      const result = await handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345', ...args });
+      return JSON.parse(result.content[0].text);
+    }
+
+    it('labels an instructional day from its event', async () => {
+      const data = await run();
+      const q3 = data[0].terms.find((t: { termName: string }) => t.termName === 'Q3');
+      expect(q3.days).toEqual([{ date: '2026-03-15', requiresAttendance: true, comments: 'Early Release Day' }]);
+    });
+
+    it('keeps a comment the day list still carries', async () => {
+      const data = await run();
+      expect(data[0].terms[0].days[0]).toEqual({ date: '2025-08-25', requiresAttendance: true, comments: '1st Day of School' });
+    });
+
+    it('lists the labelled days off in date order, joining two events on one date', async () => {
+      const data = await run();
+      expect(data[0].daysOff).toEqual([
+        { date: '2025-11-27', comments: 'Holiday; Thanksgiving' },
+        // between Q3 (ends 04-02) and Q4 (starts 04-13): in no term, still listed
+        { date: '2026-04-06', comments: 'Spring Break' },
+      ]);
+      // another calendar's event is not this enrollment's
+      expect(JSON.stringify(data)).not.toContain('Other calendar');
+    });
+
+    it('since/until applies to days off', async () => {
+      const data = await run({ since: '2026-04-01', until: '2026-04-30' });
+      expect(data[0].daysOff).toEqual([{ date: '2026-04-06', comments: 'Spring Break' }]);
+    });
+
+    it('omits daysOff when none are labelled', async () => {
+      const data = await run({ since: '2025-08-01', until: '2025-09-30' });
+      expect('daysOff' in data[0]).toBe(false);
+    });
+
+    it('still lists days off when the day list is unavailable', async () => {
+      const data = await run({}, (path) => {
+        if (path.includes('/calendar/instructionalDay') || path.includes('/calendar/day?')) {
+          return Promise.reject(new PortalUnreachableError('anoka', 500));
+        }
+        return defaultImpl(path);
+      });
+      expect(data[0].warning).toBe('SchoolDaysUnavailable');
+      expect(data[0].daysOff.map((d: { date: string }) => d.date)).toEqual(['2025-11-27', '2026-04-06']);
+    });
+
+    it('asks for day events once per student, not once per enrollment', async () => {
+      const twoEnrollments = { ...STUDENT, enrollments: [STUDENT.enrollments[0], { ...STUDENT.enrollments[0], enrollmentID: 2 }] };
+      const client = setup((path) => (path === '/campus/api/portal/students' ? Promise.resolve([twoEnrollments]) : defaultImpl(path)));
+      await handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' });
+      const calls = vi.mocked(client.request).mock.calls.filter((c) => c[1] === DAY_EVENT_PATH);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('a dayEvent route failure costs only the labels', async () => {
+      const data = await run({}, (path) => (path === DAY_EVENT_PATH
+        ? Promise.reject(new Error('IC 404 Not Found for ' + path))
+        : defaultImpl(path)));
+      expect(data[0].warning).toBeUndefined();
+      expect(data[0].terms[2].days).toEqual([{ date: '2026-03-15', requiresAttendance: true }]);
+      expect(JSON.stringify(data)).not.toContain('daysOff');
+    });
+
+    it('tolerates an event group with no events list', async () => {
+      const data = await run({}, (path) => (path === DAY_EVENT_PATH
+        ? Promise.resolve({ crossSiteEnrollment: false, structureID: 3917 })
+        : defaultImpl(path)));
+      expect(data[0].terms[2].days).toEqual([{ date: '2026-03-15', requiresAttendance: true }]);
+    });
+
+    it('does not mask a session error on dayEvent', async () => {
+      setup((path) => (path === DAY_EVENT_PATH ? Promise.reject(new SessionExpiredError('anoka')) : defaultImpl(path)));
       await expect(handlers.get('ic_list_school_days')!({ district: 'anoka', studentId: '12345' }))
         .rejects.toBeInstanceOf(SessionExpiredError);
     });

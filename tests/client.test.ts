@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile as fsWriteFile } from 'fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { ICClient, AuthFailedError, DownloadTooLargeError, MAX_DOWNLOAD_BYTES } from '../src/client.js';
+import { ICClient, AuthFailedError, DownloadTooLargeError, MAX_DOWNLOAD_BYTES, PortalUnreachableError, parseCampusVersion } from '../src/client.js';
 import { withCallSignal } from '@chrischall/mcp-utils';
 import type { Account } from '../src/config.js';
 
@@ -399,9 +399,36 @@ describe('ICClient.request — error paths', () => {
     fetchSpy
       .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
       .mockResolvedValueOnce(noLinkedAccounts())
-      .mockResolvedValueOnce(new Response('', { status: 500 }));
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(new Response('<p>Version:Campus-2635.16</p>', { status: 200 }));
     const client = new ICClient(primaryAccount);
     await expect(client.request('anoka', '/x')).rejects.toThrow(/Portal unreachable/);
+  });
+
+  it('a data GET 5xx carries the district Campus version, for bug reports', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(new Response('<p>Version:Campus-2635.16</p>', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    const err = await client.request('anoka', '/x').catch((e) => e);
+    expect(err).toBeInstanceOf(PortalUnreachableError);
+    expect(err.campusVersion).toBe('2635.16');
+    expect(err.message).toContain('Campus 2635.16');
+  });
+
+  it('a data GET 5xx stays unannotated when the version is unknown', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(new Response('no footer here', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    const err = await client.request('anoka', '/x').catch((e) => e);
+    expect(err).toBeInstanceOf(PortalUnreachableError);
+    expect(err.campusVersion).toBeUndefined();
+    expect(err.message).toBe("Portal unreachable for district 'anoka' (status 500)");
   });
 
   it('throws on non-ok, non-5xx, non-401 response', async () => {
@@ -2528,5 +2555,63 @@ describe('ICClient — timeouts, cancellation and download cap', () => {
       expect(meta.bytes).toBe(0);
       expect((await readFile(dest)).length).toBe(0);
     });
+  });
+});
+
+describe('parseCampusVersion', () => {
+  it('reads the version out of the login-page footer', () => {
+    expect(parseCampusVersion('<p>&copy; 2003-2026 Infinite Campus, Inc. | Version:Campus-2635.16</p>')).toBe('2635.16');
+  });
+  it('tolerates a space after the colon', () => {
+    expect(parseCampusVersion('Version: Campus-2701.3</p>')).toBe('2701.3');
+  });
+  it('is null when the page carries no version', () => {
+    expect(parseCampusVersion('<html>Sign in</html>')).toBeNull();
+  });
+});
+
+describe('ICClient.campusVersion', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { fetchSpy = vi.spyOn(globalThis, 'fetch'); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("fetches the district's parent login page without a session and caches the answer", async () => {
+    fetchSpy.mockResolvedValue(new Response('<p>Version:Campus-2635.16</p>', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    expect(await client.campusVersion('anoka')).toBe('2635.16');
+    expect(await client.campusVersion('anoka')).toBe('2635.16');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).toBe('https://anoka.infinitecampus.org/campus/portal/parents/anoka.jsp');
+    expect(JSON.stringify(init?.headers ?? {})).not.toMatch(/cookie/i);
+  });
+
+  it('is null on a non-ok page, and asks again next time', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response('Version:Campus-2635.16', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    expect(await client.campusVersion('anoka')).toBeNull();
+    expect(await client.campusVersion('anoka')).toBe('2635.16');
+  });
+
+  it('is null when the fetch throws', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('ECONNRESET'));
+    const client = new ICClient(primaryAccount);
+    expect(await client.campusVersion('anoka')).toBeNull();
+  });
+
+  it('is null for a district this client does not know, without a request', async () => {
+    const client = new ICClient(primaryAccount);
+    expect(await client.campusVersion('nowhere')).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('concurrent callers share one fetch', async () => {
+    fetchSpy.mockResolvedValue(new Response('Version:Campus-2635.16', { status: 200 }));
+    const client = new ICClient(primaryAccount);
+    const [a, b] = await Promise.all([client.campusVersion('anoka'), client.campusVersion('anoka')]);
+    expect([a, b]).toEqual(['2635.16', '2635.16']);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

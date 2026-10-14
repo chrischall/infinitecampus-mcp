@@ -36,6 +36,9 @@ export function registerHealthcheckTools(
         base_url: state.account.baseUrl,
         configured_district: state.account.district,
         auth_source: state.source ?? 'unknown',
+        // Read off the login page, so it needs no session and is reported
+        // even when discovery cannot run. Diagnostic only (#253).
+        campus_version: await state.client.campusVersion(state.account.name),
       };
       try {
         // Discovery is what knows about LINKED districts, and it needs a live
@@ -43,7 +46,11 @@ export function registerHealthcheckTools(
         // is known and let the probe below decide.
         await state.client.ensureDiscovery();
         const districts = state.client.listDistricts();
-        detail.districts = districts.map((d) => ({ name: d.name, linked: d.linked }));
+        detail.districts = await Promise.all(districts.map(async (d) => ({
+          name: d.name,
+          linked: d.linked,
+          campus_version: await state.client!.campusVersion(d.name),
+        })));
         const linked = districts.filter((d) => d.linked).map((d) => d.name);
         detail.configured_district_is_linked = districts.some(
           (d) => d.name === state.account!.district && d.linked,

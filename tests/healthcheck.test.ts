@@ -39,6 +39,7 @@ describe('ic_healthcheck', () => {
   it('flags a configured district the account is not linked to', async () => {
     const client = {
       ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [
         { name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: false },
         { name: 'Metrolina Regional Scholars Academy', baseUrl: 'https://60f.ncsis.gov', linked: true },
@@ -59,6 +60,7 @@ describe('ic_healthcheck', () => {
     const request = vi.fn(async () => [{ personID: 1 }]);
     const client = {
       ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [
         { name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: false },
         { name: 'Metrolina Regional Scholars Academy', baseUrl: 'https://60f.ncsis.gov', linked: true },
@@ -83,6 +85,7 @@ describe('ic_healthcheck', () => {
   it('falls back to a named source when none was recorded', async () => {
     const client = {
       ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: true }],
       request: vi.fn(async () => []),
     } as unknown as ICClient;
@@ -97,6 +100,7 @@ describe('ic_healthcheck', () => {
     const request = vi.fn(async () => []);
     const client = {
       ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: false }],
       request,
     } as unknown as ICClient;
@@ -110,6 +114,7 @@ describe('ic_healthcheck', () => {
       ensureDiscovery: vi.fn(async () => {
         throw new Error('no live session');
       }),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [],
       request: vi.fn(async () => []),
     } as unknown as ICClient;
@@ -123,6 +128,7 @@ describe('ic_healthcheck', () => {
   it('names ContextMint Bridge in the credential_rejected hint', async () => {
     const client = {
       ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async () => '2635.16'),
       listDistricts: () => [{ name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: true }],
       request: vi.fn(async () => {
         throw Object.assign(new Error('HTTP 401'), { status: 401 });
@@ -132,5 +138,39 @@ describe('ic_healthcheck', () => {
     expect(result.error?.kind).toBe('credential_rejected');
     expect(result.hint).toMatch(/ContextMint Bridge/);
     expect(result.hint).not.toMatch(/fetchproxy/i);
+  });
+
+  // Diagnostic only: the version a district runs is what a bug report about a
+  // changed endpoint needs first (#253).
+  it('reports each district Campus version, and the configured one', async () => {
+    const versions: Record<string, string | null> = { psu600cms: '2635.16', 'Metrolina Regional Scholars Academy': null };
+    const client = {
+      ensureDiscovery: vi.fn(async () => {}),
+      campusVersion: vi.fn(async (d: string) => versions[d]),
+      listDistricts: () => [
+        { name: 'psu600cms', baseUrl: 'https://600.ncsis.gov', linked: false },
+        { name: 'Metrolina Regional Scholars Academy', baseUrl: 'https://60f.ncsis.gov', linked: true },
+      ],
+      request: vi.fn(async () => []),
+    } as unknown as ICClient;
+    const { result } = await call({ account: ACCOUNT as never, source: 'env', configError: null, client });
+    expect(result.credential.detail).toMatchObject({
+      campus_version: '2635.16',
+      districts: [
+        { name: 'psu600cms', linked: false, campus_version: '2635.16' },
+        { name: 'Metrolina Regional Scholars Academy', linked: true, campus_version: null },
+      ],
+    });
+  });
+
+  it('reports the configured district version even when discovery cannot run', async () => {
+    const client = {
+      ensureDiscovery: vi.fn(async () => { throw new Error('no live session'); }),
+      campusVersion: vi.fn(async () => '2635.16'),
+      listDistricts: () => [],
+      request: vi.fn(async () => []),
+    } as unknown as ICClient;
+    const { result } = await call({ account: ACCOUNT as never, source: 'fetchproxy', configError: null, client });
+    expect(result.credential.detail).toMatchObject({ campus_version: '2635.16' });
   });
 });
