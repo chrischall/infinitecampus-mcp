@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "infinitecampus": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/bundle.js"],
+      "command": "npx",
+      "args": ["-y", "infinitecampus-mcp"],
       "env": {
         "IC_BASE_URL": "${IC_BASE_URL}",
         "IC_DISTRICT": "${IC_DISTRICT}",
