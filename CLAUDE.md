@@ -134,7 +134,7 @@ Most tool tests mock `server.registerTool` and call the captured handler directl
 ```
 .claude-plugin/plugin.json       # Claude Code plugin manifest (skill + .mcp.json ref)
 .claude-plugin/marketplace.json  # Marketplace catalog entry
-.mcp.json                        # Plugin-runtime MCP server config (uses ${CLAUDE_PLUGIN_ROOT})
+.mcp.json                        # Plugin-runtime MCP server config (npx -y the published package; a git-source install has no dist/)
 manifest.json                    # MCPB / DXT bundle manifest (user_config + tool catalog)
 server.json                      # modelcontextprotocol/registry entry
 mint.yaml                        # mcp-host hosting manifest (env / egress / state for registration)
