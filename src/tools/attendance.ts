@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
 
@@ -44,8 +45,8 @@ interface RawAttendanceEnrollment {
 const argsSchema = z.object({
   district: z.string(),
   studentId: z.string(),
-  since: z.string().describe('YYYY-MM-DD').optional(),
-  until: z.string().describe('YYYY-MM-DD').optional(),
+  since: IsoDate.describe('YYYY-MM-DD').optional(),
+  until: IsoDate.describe('YYYY-MM-DD').optional(),
 });
 
 function inRange(date: string | undefined, since?: string, until?: string): boolean {

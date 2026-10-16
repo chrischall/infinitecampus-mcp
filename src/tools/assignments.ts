@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 
 interface RawAssignment {
@@ -28,8 +29,8 @@ const argsSchema = z.object({
   district: z.string(),
   studentId: z.string(),
   courseId: z.string().describe('sectionID (optional, from ic_get_schedule). The endpoint supports server-side filtering by sectionID only.').optional(),
-  since: z.string().describe('YYYY-MM-DD; filters dueDate >= since (client-side)').optional(),
-  until: z.string().describe('YYYY-MM-DD; filters dueDate <= until (client-side)').optional(),
+  since: IsoDate.describe('YYYY-MM-DD; filters dueDate >= since (client-side)').optional(),
+  until: IsoDate.describe('YYYY-MM-DD; filters dueDate <= until (client-side)').optional(),
   missingOnly: z.boolean().describe('Only return assignments flagged missing by the teacher').optional(),
 });
 

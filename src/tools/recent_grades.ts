@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate, shiftIsoDate, todayIso } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 
 interface RawRecentGrade {
@@ -42,7 +43,7 @@ interface TrimmedRecentGrade {
 const argsSchema = z.object({
   district: z.string(),
   studentId: z.string(),
-  since: z.string().describe('YYYY-MM-DD; defaults to 14 days ago. Passed to the endpoint as an ISO timestamp (modifiedDate filter).').optional(),
+  since: IsoDate.describe('YYYY-MM-DD; defaults to 14 days ago. Passed to the endpoint as an ISO timestamp (modifiedDate filter).').optional(),
 });
 
 const KEYS: Array<keyof TrimmedRecentGrade> = [
@@ -51,10 +52,11 @@ const KEYS: Array<keyof TrimmedRecentGrade> = [
   'missing', 'late', 'turnedIn', 'feedback', 'comments',
 ];
 
-function defaultSinceDate(now: Date): string {
-  const d = new Date(now);
-  d.setUTCDate(d.getUTCDate() - 14);
-  return d.toISOString().substring(0, 10);
+// "Two weeks ago" is the parent's calendar day, not UTC's: todayIso() follows
+// MCP_USER_TZ (set by the host) or the local zone, so a US evening on a UTC
+// server does not move the cutoff a day later and drop boundary-day grades.
+function defaultSinceDate(): string {
+  return shiftIsoDate(todayIso(), -14);
 }
 
 export function registerRecentGradesTools(server: McpServer, client: ICClient): void {
@@ -64,7 +66,7 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
-    const sinceDate = args.since ?? defaultSinceDate(new Date());
+    const sinceDate = args.since ?? defaultSinceDate();
     const modifiedDate = `${sinceDate}T00:00:00`;
 
     const raw = await client.request<RawRecentGrade[]>(

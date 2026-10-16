@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate } from '@chrischall/mcp-utils';
 import { PortalUnreachableError, type ICClient } from '../client.js';
 import { findStudent, is404, studentNotFound, toArray } from './_shared.js';
 
@@ -168,8 +169,8 @@ function joinLabels(labels: Array<string | null | undefined>): string {
 const argsSchema = z.object({
   district: z.string(),
   studentId: z.string().describe('Student personID from ic_list_students'),
-  since: z.string().describe('YYYY-MM-DD; include only days on or after this date').optional(),
-  until: z.string().describe('YYYY-MM-DD; include only days on or before this date').optional(),
+  since: IsoDate.describe('YYYY-MM-DD; include only days on or after this date').optional(),
+  until: IsoDate.describe('YYYY-MM-DD; include only days on or before this date').optional(),
 });
 
 export function registerCalendarTools(server: McpServer, client: ICClient): void {
