@@ -9,6 +9,9 @@
 // through `client.callTool`, so the schema validation, the argument plumbing
 // and the content envelope are all the production ones.
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { createTestHarness, parseToolResult } from '@chrischall/mcp-utils/test';
 import { ICClient } from '../src/client.js';
@@ -321,6 +324,45 @@ describe('view: the wiring audit', () => {
       const view = (tool.inputSchema.properties as Record<string, { enum?: string[] }>).view;
       expect(view.enum, `${tool.name} advertises the wrong rungs`).toEqual(['compact', 'full']);
     }
+  });
+
+  it('types every since/until as an ISO date, so a malformed one is rejected instead of filtering silently', async () => {
+    // since/until are compared lexically against YYYY-MM-DD; '2026-1-5' would
+    // sort after '2026-01-31' and drop most days without an error.
+    const tools = await allTools();
+    const dateArgs: string[] = [];
+    for (const tool of tools) {
+      const props = (tool.inputSchema.properties ?? {}) as Record<string, { format?: string; pattern?: string }>;
+      for (const key of ['since', 'until']) {
+        if (!props[key]) continue;
+        dateArgs.push(`${tool.name}.${key}`);
+        expect(props[key].format, `${tool.name}.${key} is not an ISO date`).toBe('date');
+      }
+    }
+    // 7 tools take since; 6 of them also take until (recent_grades is since-only).
+    expect(dateArgs).toHaveLength(13);
+  });
+
+  it('names only real parameters in the skill (skills/ic/SKILL.md)', async () => {
+    // The skill once documented `url` for ic_download_document / ic_get_message,
+    // whose schemas take documentId / messageUrl — a model following it failed
+    // its first call. Every `ic_x(a, b?, c=…)` mention must use advertised names.
+    const tools = await allTools();
+    const byName = new Map(tools.map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]));
+    const skill = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'ic', 'SKILL.md'), 'utf8');
+    const bad: string[] = [];
+    let mentions = 0;
+    for (const m of skill.matchAll(/\b(ic_[a-z_]+)\(([^)]*)\)/g)) {
+      const props = byName.get(m[1]);
+      expect(props, `SKILL.md names unknown tool ${m[1]}`).toBeDefined();
+      mentions++;
+      for (const raw of m[2].split(',')) {
+        const param = raw.trim().replace(/[?=].*$/, '');
+        if (param && !props!.includes(param)) bad.push(`${m[1]}(${param})`);
+      }
+    }
+    expect(mentions).toBeGreaterThan(20);
+    expect(bad).toEqual([]);
   });
 
   it('leaves the one write tool without a view parameter', async () => {

@@ -113,5 +113,27 @@ describe('ic_list_recent_grades', () => {
       const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
       expect(decodeURIComponent(url)).toContain('2026-04-02T00:00:00');
     });
+
+    it("counts back 14 days from the user's day (MCP_USER_TZ), not UTC's", async () => {
+      // 2026-04-16T02:00Z is still the evening of 2026-04-15 in New York.
+      vi.setSystemTime(new Date('2026-04-16T02:00:00Z'));
+      vi.stubEnv('MCP_USER_TZ', 'America/New_York');
+      try {
+        const client = setup([]);
+        await handlers.get('ic_list_recent_grades')!({ district: 'anoka', studentId: '12345' });
+        const url = (client.request as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+        expect(decodeURIComponent(url)).toContain('2026-04-01T00:00:00');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
+  it('rejects a malformed since date instead of sending it upstream', async () => {
+    const client = setup([]);
+    await expect(handlers.get('ic_list_recent_grades')!({
+      district: 'anoka', studentId: '12345', since: '2026-4-1',
+    })).rejects.toThrow();
+    expect(client.request).not.toHaveBeenCalled();
   });
 });

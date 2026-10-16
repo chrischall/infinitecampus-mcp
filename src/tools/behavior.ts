@@ -1,14 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
 
 const argsSchema = z.object({
   district: z.string(),
   studentId: z.string(),
-  since: z.string().optional(),
-  until: z.string().optional(),
+  since: IsoDate.describe('YYYY-MM-DD').optional(),
+  until: IsoDate.describe('YYYY-MM-DD').optional(),
 });
 
 export function registerBehaviorTools(server: McpServer, client: ICClient): void {

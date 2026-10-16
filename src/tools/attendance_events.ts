@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
+import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
 
@@ -80,8 +81,8 @@ interface TrimmedEnrollmentEvents {
 const argsSchema = z.object({
   district: z.string(),
   studentId: z.string().describe('Student personID from ic_list_students'),
-  since: z.string().describe('YYYY-MM-DD; include only events on or after this date').optional(),
-  until: z.string().describe('YYYY-MM-DD; include only events on or before this date').optional(),
+  since: IsoDate.describe('YYYY-MM-DD; include only events on or after this date').optional(),
+  until: IsoDate.describe('YYYY-MM-DD; include only events on or before this date').optional(),
   excusedOnly: z.boolean().describe('Only include events with excuse=E').optional(),
 });
 
