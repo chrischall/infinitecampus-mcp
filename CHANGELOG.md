@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.0...v3.2.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **plugin:** launch the published package so marketplace installs start ([#259](https://github.com/chrischall/infinitecampus-mcp/issues/259)) ([a129c9c](https://github.com/chrischall/infinitecampus-mcp/commit/a129c9ca94f6e59415ad1d77f4bb597d1810e86a))
+
 ## [3.2.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.1.9...v3.2.0) (2026-10-14)
 
 
