@@ -171,9 +171,9 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
   });
 
   server.registerTool('ic_get_message', {
-    description: "Fetch the HTML body of an inbox message and return it parsed into { subject, date, body, url }. Takes a `messageUrl` which is the `url` field from an item returned by ic_list_messages' inbox section (e.g. 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=...'). Relative and /campus/-prefixed URLs are both accepted. Note: fetching the HTML body may mark the message as read on some district configurations; probe against an empty inbox could not confirm the side effect. " +
+    description: "Fetch the HTML body of an inbox message and return it parsed into { subject, date, body, url }. Takes a `messageUrl` which is the `url` field from an item returned by ic_list_messages' inbox section (e.g. 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=...'). Relative and /campus/-prefixed URLs are both accepted. Fetching the body may mark the message as read in the portal (as opening it there does), so this is not a pure read. " +
       UNTRUSTED_DESCRIPTION_SUFFIX,
-    annotations: { readOnlyHint: true, openWorldHint: true },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     inputSchema: z.object({ ...getArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = getArgs.parse(rawArgs);

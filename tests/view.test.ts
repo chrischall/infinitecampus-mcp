@@ -306,10 +306,12 @@ describe('view: the wiring audit', () => {
 
   it('gives every read tool a `view` parameter', async () => {
     const tools = await allTools();
-    const readOnly = tools.filter((t) => t.annotations?.readOnlyHint === true);
+    const readOnly = tools.filter((t) => t.annotations?.readOnlyHint === true || t.name === 'ic_get_message');
 
     // 18 of the 19: only ic_download_document is excluded, and it is a write
     // (destructiveHint — it puts a PDF on disk) whose response is a receipt.
+    // ic_get_message is not annotated read-only (it may mark the message
+    // read), but it returns data like any read, so it keeps `view`.
     expect(readOnly).toHaveLength(18);
 
     const without = readOnly

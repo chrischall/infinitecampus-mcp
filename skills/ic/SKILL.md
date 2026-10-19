@@ -224,5 +224,5 @@ Two tools take no `view`, both because there is nothing to project:
 ## Caution
 
 - `ic_download_document` writes to disk at `destinationPath`, only inside the download directory, and refuses to replace an existing file unless `overwrite: true` — confirm the path with the user.
-- `ic_list_messages` / `ic_get_message` are nominally read-only, but on some district configurations fetching an inbox message or enumerating the list may mark entries as read. Behavior was not confirmable against an empty test inbox.
+- `ic_get_message` is not annotated read-only: fetching a message's body may mark it as read in the portal, as opening it there does (not yet confirmed against a live unread message). Use it only when the user asks to open a message; summarize the inbox from `ic_list_messages`.
 - Endpoint behavior varies by district. If `ic_list_behavior`, `ic_list_food_service`, `ic_list_documents`, `ic_list_assessments`, or `ic_list_fees` returns a `FeatureDisabled` warning, that module is simply turned off for the district — it's not an error. `ic_list_fees` may also return `PartialSuccess` when only one of its two sub-endpoints works.
