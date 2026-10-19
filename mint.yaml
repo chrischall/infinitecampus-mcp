@@ -5,6 +5,12 @@ summary: >-
   Infinite Campus (Campus Parent) MCP — single-account with CUPS
   auto-discovery. Two auth paths: IC_USERNAME/IC_PASSWORD, or sign in via
   the ContextMint Bridge browser extension.
+examples:
+  - prompt: Does my kid have any missing assignments right now? List them by class.
+    note: Reads the assignment list with the missing filter.
+  - prompt: What grades has my student gotten back in the last two weeks?
+  - prompt: How many absences and tardies does my child have this term?
+    note: Per-course attendance summary, grouped by term.
 #
 # Hosting note (a comment, not user-facing summary text): this is a
 # BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
