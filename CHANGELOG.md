@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.1...v3.2.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group with 3 updates ([#264](https://github.com/chrischall/infinitecampus-mcp/issues/264)) ([c6577bd](https://github.com/chrischall/infinitecampus-mcp/commit/c6577bd5d541c1400cc728a94a2a8d9ebe223430))
+* **messages:** stop advertising ic_get_message as read-only, since opening a message may mark it read ([#266](https://github.com/chrischall/infinitecampus-mcp/issues/266)) ([d4b364e](https://github.com/chrischall/infinitecampus-mcp/commit/d4b364ea43e5b586bb422c92ece017d66c444ae2))
+
 ## [3.2.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.0...v3.2.1) (2026-10-16)
 
 
