@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.3](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.2...v3.2.3) (2026-10-19)
+
+
+### Documentation
+
+* **mint:** add sample prompts for the public catalog ([#269](https://github.com/chrischall/infinitecampus-mcp/issues/269)) ([971d58f](https://github.com/chrischall/infinitecampus-mcp/commit/971d58ffbbee2cfbfed25da732238095e5770d81))
+
 ## [3.2.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.1...v3.2.2) (2026-10-19)
 
 
