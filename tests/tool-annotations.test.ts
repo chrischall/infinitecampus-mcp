@@ -101,12 +101,16 @@ describe('tool annotations', () => {
     expect(notOpen).toEqual([]);
   });
 
-  it('keeps ic_download_document as the only write, and destructive', async () => {
-    // Inverse test: with overwrite:true it replaces an existing file on disk,
-    // and nothing in this tool set restores the replaced file.
+  it('keeps ic_download_document as the only destructive write, and ic_get_message not read-only', async () => {
+    // Inverse test: with overwrite:true ic_download_document replaces an
+    // existing file on disk, and nothing in this tool set restores it.
+    // ic_get_message may mark the message read on the portal (unconfirmed),
+    // so a client must not run it unprompted as a pure read — but marking
+    // read loses nothing, so it is not destructive.
     const writes = Object.entries(await advertised())
       .filter(([, a]) => a?.readOnlyHint !== true)
-      .map(([name, a]) => [name, a?.destructiveHint]);
-    expect(writes).toEqual([['ic_download_document', true]]);
+      .map(([name, a]) => [name, a?.destructiveHint])
+      .sort(([x], [y]) => String(x).localeCompare(String(y)));
+    expect(writes).toEqual([['ic_download_document', true], ['ic_get_message', false]]);
   });
 });
