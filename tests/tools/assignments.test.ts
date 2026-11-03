@@ -7,14 +7,17 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{ content: Array<{
 const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 
 let handlers: Map<string, ToolHandler>;
+let descriptions: Map<string, string>;
 
 function setup(returnValue: unknown) {
   const client = new ICClient(account);
   vi.spyOn(client, 'request').mockResolvedValue(returnValue);
   const server = new McpServer({ name: 'test', version: '0.0.0' });
   handlers = new Map();
-  vi.spyOn(server, 'registerTool').mockImplementation((name: string, _c: unknown, cb: unknown) => {
+  descriptions = new Map();
+  vi.spyOn(server, 'registerTool').mockImplementation((name: string, c: unknown, cb: unknown) => {
     handlers.set(name, cb as ToolHandler);
+    descriptions.set(name, (c as { description: string }).description);
     return undefined as never;
   });
   registerAssignmentTools(server, client);
@@ -109,5 +112,15 @@ describe('ic_list_assignments', () => {
     const data = JSON.parse(result.content[0].text);
     // The NoDate assignment is excluded because filter requires dueDate string
     expect(data.map((a: { assignmentName: string }) => a.assignmentName)).toEqual(['HW1', 'Lab', 'Essay']);
+  });
+});
+
+// The gateway's search_tools (and ContextMint's on-device shortlist) match
+// whole words against name, MCP and description. "Do my kids have any
+// homework?" found nothing because no Infinite Campus tool said "homework".
+describe('ic_list_assignments is findable by the words parents use', () => {
+  it('mentions homework', () => {
+    setup([]);
+    expect(descriptions.get('ic_list_assignments')!.toLowerCase()).toMatch(/\bhomework\b/);
   });
 });
