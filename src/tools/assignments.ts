@@ -37,7 +37,7 @@ const argsSchema = z.object({
 export function registerAssignmentTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_assignments', {
     description:
-      "List a student's assignments. The IC endpoint returns the full term history (~hundreds of items); date and missing filters are applied client-side. For a single course, pass courseId (the sectionID from ic_get_schedule).",
+      "List a student's assignments (homework, tests and projects, with due dates and missing flags). The IC endpoint returns the full term history (~hundreds of items); date and missing filters are applied client-side. For a single course, pass courseId (the sectionID from ic_get_schedule).",
     annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
