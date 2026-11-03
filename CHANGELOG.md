@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.2.3](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.2...v3.2.3) (2026-11-03)
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group across 1 directory with 3 updates ([#273](https://github.com/chrischall/infinitecampus-mcp/issues/273)) ([6ddea48](https://github.com/chrischall/infinitecampus-mcp/commit/6ddea484f2622a5c17cab740e47e6bdefe1c7de9))
+* **deps:** bump the production-dependencies group with 4 updates ([#271](https://github.com/chrischall/infinitecampus-mcp/issues/271)) ([d52ec75](https://github.com/chrischall/infinitecampus-mcp/commit/d52ec752674f6fe1c60e0c430670516e55e8aff0))
+* **search:** mention homework in the assignment tools' descriptions ([#274](https://github.com/chrischall/infinitecampus-mcp/issues/274)) ([b92762f](https://github.com/chrischall/infinitecampus-mcp/commit/b92762f357c1264f64c81ffd96faa05ecd32f410))
+
+
+### Documentation
+
+* **mint:** add sample prompts for the public catalog ([#269](https://github.com/chrischall/infinitecampus-mcp/issues/269)) ([971d58f](https://github.com/chrischall/infinitecampus-mcp/commit/971d58ffbbee2cfbfed25da732238095e5770d81))
+
 ## [3.2.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.1...v3.2.2) (2026-10-19)
 
 
