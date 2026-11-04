@@ -21,7 +21,7 @@ import { registerDistrictTools } from './tools/districts.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { registerStudentTools } from './tools/students.js';
 import { registerScheduleTools } from './tools/schedule.js';
-import { registerAssignmentTools } from './tools/assignments.js';
+import { assignmentToolsRegistrar, buildStudentLabels } from './tools/assignments.js';
 import { registerGradeTools } from './tools/grades.js';
 import { registerAttendanceTools } from './tools/attendance.js';
 import { registerBehaviorTools } from './tools/behavior.js';
@@ -123,12 +123,17 @@ function unconfiguredClient(reason: Error | null): ICClient {
     ? new ICClient(account, { refreshSession })
     : unconfiguredClient(configError);
   if (account) healthState.client = client;
+  // The `student` enum is built ONCE per process, here — not inside the
+  // registrar, which runMcp runs once per served instance. Bounded by
+  // STUDENT_LABELS_TIMEOUT_MS, and null (no enum, the property kept) on any
+  // failure, the unconfigured stand-in included. It never rejects.
+  const studentLabels = buildStudentLabels(client);
   const tools: ToolRegistrar<ICClient>[] = [
     (server) => registerHealthcheckTools(server, healthState),
     registerDistrictTools,
     registerStudentTools,
     registerScheduleTools,
-    registerAssignmentTools,
+    assignmentToolsRegistrar(studentLabels),
     registerGradeTools,
     registerAttendanceTools,
     registerBehaviorTools,

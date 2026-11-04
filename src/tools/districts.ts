@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
+import type { MintHint } from '../mint.js';
 
 export function registerDistrictTools(server: McpServer, client: ICClient): void {
   server.registerTool('ic_list_districts', {
@@ -10,6 +11,7 @@ export function registerDistrictTools(server: McpServer, client: ICClient): void
       view: viewArg(),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
   }, async ({ view }) => {
     await client.ensureDiscovery();
     const data = client.listDistricts();

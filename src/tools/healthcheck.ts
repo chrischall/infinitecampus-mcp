@@ -3,6 +3,7 @@ import { registerCredentialHealthcheckTool } from '@chrischall/mcp-utils/healthc
 import type { ICClient } from '../client.js';
 import type { ResolvedAuth } from '../auth.js';
 import type { Account } from '../config.js';
+import type { MintHint } from '../mint.js';
 
 /**
  * Register `ic_healthcheck` — reports which auth path resolved and which
@@ -25,7 +26,7 @@ export function registerHealthcheckTools(
   state: { account: Account | null; source: ResolvedAuth['source'] | undefined; configError: Error | null; client: ICClient | null },
 ): void {
   registerCredentialHealthcheckTool({
-    server,
+    server: withMintHint(server, { domain: 'school', intent: 'lookup' }),
     prefix: 'ic',
     hostLabel: 'your Infinite Campus portal',
     resolveCredential: async () => {
@@ -75,4 +76,17 @@ export function registerHealthcheckTools(
         'Infinite Campus rejected the credentials. Check IC_USERNAME/IC_PASSWORD, or sign into your IC portal in the browser so the ContextMint Bridge extension fallback can lift a session.',
     },
   });
+}
+
+/**
+ * mcp-utils' healthcheck registrar takes no `_meta`, so its one `registerTool`
+ * call gets the context-group hint here, at the seam, merged over any `_meta`
+ * the registrar sets itself.
+ */
+function withMintHint(server: McpServer, mint: MintHint): McpServer {
+  const hinted = Object.create(server) as McpServer;
+  const register = server.registerTool.bind(server) as (name: string, config: Record<string, unknown>, cb: unknown) => unknown;
+  (hinted as unknown as { registerTool: typeof register }).registerTool = (name, config, cb) =>
+    register(name, { ...config, _meta: { ...(config._meta as Record<string, unknown> | undefined), mint } }, cb);
+  return hinted;
 }

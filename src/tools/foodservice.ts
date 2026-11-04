@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -18,6 +19,7 @@ export function registerFoodServiceTools(server: McpServer, client: ICClient): v
   server.registerTool('ic_list_food_service', {
     description: "List a student's lunch balance and recent food-service transactions. Returns FeatureDisabled if the district has the module turned off (detected via displayOptions or a 404 backstop).",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

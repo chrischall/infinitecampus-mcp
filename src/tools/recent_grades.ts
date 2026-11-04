@@ -3,6 +3,7 @@ import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import { IsoDate, shiftIsoDate, todayIso } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
+import type { MintHint } from '../mint.js';
 
 interface RawRecentGrade {
   assignmentName?: string;
@@ -63,6 +64,7 @@ export function registerRecentGradesTools(server: McpServer, client: ICClient): 
   server.registerTool('ic_list_recent_grades', {
     description: "List recently-graded assignments for a student. Server-side filtered by scoreModifiedDate. Pass since=YYYY-MM-DD to set the cutoff; defaults to 14 days ago.",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);
