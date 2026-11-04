@@ -88,6 +88,14 @@ describe('buildStudentLabels', () => {
     expect(await buildStudentLabels(mockClient({ hang: true }), 20)).toBeNull();
   });
 
+  it('answers null when a roster is not a list, never a partial map', async () => {
+    const client = mockClient();
+    vi.mocked(client.request).mockImplementation(async (district: string) =>
+      (district === 'wayzata' ? { error: 'not a roster' } : STUDENTS[district]) as never,
+    );
+    expect(await buildStudentLabels(client)).toBeNull();
+  });
+
   it('answers null when there are no students to name', async () => {
     const client = mockClient();
     vi.spyOn(client, 'listDistricts').mockReturnValue([]);
@@ -173,6 +181,13 @@ describe('ic_list_assignments student argument', () => {
   it('refuses half of the raw pair', async () => {
     const handler = capture(mockClient(), null);
     await expect(handler({ district: 'anoka' })).rejects.toThrow(/student.*or both district and studentId/);
+  });
+
+  it('refuses a label when the student list cannot be read at call time', async () => {
+    const handler = capture(mockClient({ studentsFail: 'anoka' }), null);
+    await expect(handler({ student: 'Alex Doe (anoka)' })).rejects.toThrow(
+      'Unknown student "Alex Doe (anoka)": the student list could not be read.',
+    );
   });
 
   it('refuses an unknown label, naming the known ones', async () => {

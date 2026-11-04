@@ -92,8 +92,6 @@ export async function buildStudentLabels(
   try {
     const work = (async () => collectLabels(client))().catch(() => null);
     return await Promise.race([work, budget]);
-  } catch {
-    return null;
   } finally {
     clearTimeout(timer);
   }
