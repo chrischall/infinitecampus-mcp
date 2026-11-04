@@ -3,6 +3,7 @@ import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, toArray } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 const argsSchema = z.object({
   district: z.string(),
@@ -53,6 +54,7 @@ export function registerTeacherTools(server: McpServer, client: ICClient): void 
   server.registerTool('ic_list_teachers', {
     description: "List a student's teachers (per enrolled section) and assigned counselor(s). Combines two endpoints (section/contacts and studentCounselor/byUser). Response field shapes may vary slightly by district — core fields (firstName, lastName, email) are consistent; additional fields are passed through.",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

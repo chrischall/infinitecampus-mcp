@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { IsoDate } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, findStudent, studentNotFound, toArray, checkFeatureDisabled } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 interface RawSectionPlacement {
   periodName?: string;
@@ -80,6 +81,7 @@ export function registerAttendanceTools(server: McpServer, client: ICClient): vo
   server.registerTool('ic_list_attendance', {
     description: "List a student's absences and tardies (per-course summary grouped by term). Auto-resolves enrollmentID from the student record.",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'whats-on', when: { start: 'since', end: 'until' } } satisfies MintHint },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

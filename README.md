@@ -15,7 +15,7 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 | Districts | `ic_list_districts` |
 | Students | `ic_list_students` |
 | Schedule | `ic_get_schedule` |
-| Assignments | `ic_list_assignments` (sectionID server-side; `missingOnly` / date filters client-side) |
+| Assignments | `ic_list_assignments` (sectionID server-side; `missingOnly` / date filters client-side; name the student as `student: "<name> (<district>)"` or with `district` + `studentId`; `view: "brief"` answers one line per assignment) |
 | Grades | `ic_list_grades`, `ic_list_recent_grades` (default 14d window) |
 | School calendar | `ic_list_school_days` |
 | Attendance | `ic_list_attendance` (per-course summary), `ic_list_attendance_events` (individual events with codes + comments) |
@@ -29,6 +29,10 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 | Features | `ic_get_features` (per-enrollment displayOptions flags) |
 
 Tools that the harness will gate as write/IO operations: `ic_download_document`.
+
+### Context-group hints
+
+Every tool carries a `_meta.mint` hint (domain `school`) that [mcp-host](https://github.com/chrischall/mcp-host) reads to group tools by what they answer. `ic_list_assignments` is the canonical *what's due* tool: its hint names `student` as the subject and `since`/`until` as the date range. At start the server builds the `student` labels — `"<name> (<district>)"` for every student in every linked district — and advertises them as an enum; if that fails or takes longer than 8 seconds, the argument is still advertised without an enum and a label is resolved when the tool is called.
 
 ## Configuration
 

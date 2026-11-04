@@ -25,6 +25,19 @@ to **compact**) over `viewParam`/`resolveView`/`stripMediaUrls`/`minifiedResult`
 from `@chrischall/mcp-utils`. **All 18 read tools** (`readOnlyHint: true`) take
 `view` and answer through `viewResponse`; `ic_download_document` does not — it is
 a write (`destructiveHint`) whose response is a receipt with nothing to strip.
+`ic_list_assignments` alone also honours `brief` (its own enum, not `IC_VIEWS`):
+one text line per assignment, `<assignmentName> — due <dueDate or no date> —
+<missing|ok>`, built only from fields this repo already reads.
+
+## Context-group hints (`_meta.mint`)
+
+Every `registerTool` carries `_meta: { mint: {...} satisfies MintHint }`
+(`src/mint.ts`, the shared mcp-host contract); `tests/mint-hints.test.ts` holds
+it as a strict schema over the advertised list. `ic_healthcheck` gets its hint
+through `withMintHint` in `healthcheck.ts`, because the mcp-utils registrar
+takes no `_meta`. `ic_list_assignments`' `student` enum is built ONCE at start
+(`buildStudentLabels`, bounded, all-or-nothing: a partial enum would refuse the
+students it left out).
 
 **Compact here strips media URLs and does nothing else.** That is the whole
 projection, and the restraint is the point: this repo holds no captured Infinite

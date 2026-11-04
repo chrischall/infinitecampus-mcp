@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { IsoDate } from '@chrischall/mcp-utils';
 import { PortalUnreachableError, type ICClient } from '../client.js';
 import { findStudent, is404, studentNotFound, toArray } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 interface RawTerm {
   termID: number;
@@ -178,6 +179,7 @@ export function registerCalendarTools(server: McpServer, client: ICClient): void
     description:
       "List a student's school days (instructional calendar) grouped by term. Returns one entry per enrollment, with term boundaries (Q1-Q4 start/end dates) and the school days inside each term — a day carries comments when the calendar labels it (e.g. 'Early Release Day'). Each enrollment also lists its labelled daysOff (e.g. 'Holiday', 'Teacher Work Day', 'Spring Break'), including breaks that fall between terms. Use since/until to narrow the range. An enrollment whose day list the district won't serve comes back with warning 'SchoolDaysUnavailable' (plus campusVersion when known), its terms and days off, and no school days.",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'whats-on', when: { start: 'since', end: 'until' } } satisfies MintHint },
     inputSchema: z.object({ ...argsSchema.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = argsSchema.parse(rawArgs);

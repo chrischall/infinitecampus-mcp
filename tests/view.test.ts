@@ -320,11 +320,15 @@ describe('view: the wiring audit', () => {
     expect(without).toEqual([]);
   });
 
-  it('offers compact and full — and only those — on every read tool', async () => {
+  it('offers compact and full — and only those — on every read tool, plus brief on ic_list_assignments alone', async () => {
+    // brief is honoured by ic_list_assignments only (one text line per
+    // assignment); advertising it anywhere else would promise a rung the tool
+    // does not answer in.
     const tools = await allTools();
     for (const tool of tools.filter((t) => t.annotations?.readOnlyHint === true)) {
       const view = (tool.inputSchema.properties as Record<string, { enum?: string[] }>).view;
-      expect(view.enum, `${tool.name} advertises the wrong rungs`).toEqual(['compact', 'full']);
+      const rungs = tool.name === 'ic_list_assignments' ? ['compact', 'full', 'brief'] : ['compact', 'full'];
+      expect(view.enum, `${tool.name} advertises the wrong rungs`).toEqual(rungs);
     }
   });
 

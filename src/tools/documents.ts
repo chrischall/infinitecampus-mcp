@@ -4,6 +4,7 @@ import { viewArg, viewResponse } from '../view.js';
 import { z } from 'zod';
 import type { ICClient } from '../client.js';
 import { is404, featureDisabled, toArray, findStudent, studentNotFound, checkFeatureDisabled } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 interface RawDocument {
   name?: string;
@@ -40,6 +41,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_list_documents', {
     description: "List a student's available documents (report cards, transcripts, schedules). Returns metadata only — use ic_download_document to fetch the file. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
     inputSchema: z.object({ ...listArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
@@ -74,6 +76,7 @@ export function registerDocumentTools(server: McpServer, client: ICClient): void
   server.registerTool('ic_download_document', {
     description: "Download a student's document (PDF) to disk, inside the download directory (IC_DOWNLOAD_DIR, default ~/Downloads). documentId is the url field returned by ic_list_documents. Will not overwrite an existing file unless overwrite is true. Returns FeatureDisabled if the district has the module turned off.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'other' } satisfies MintHint },
     inputSchema: downloadArgs,
   }, async (rawArgs) => {
     const args = downloadArgs.parse(rawArgs);

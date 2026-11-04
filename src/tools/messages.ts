@@ -5,6 +5,7 @@ import { extractPlainTextFromHtml } from '@chrischall/mcp-utils/html';
 import { untrustedEnvelope, UNTRUSTED_DESCRIPTION_SUFFIX } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import { toArray } from './_shared.js';
+import type { MintHint } from '../mint.js';
 
 const listArgs = z.object({
   district: z.string(),
@@ -127,6 +128,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
       "List all parent-visible messages from three IC sources combined: (1) prism notifications (assignment alerts, grade postings, attendance alerts), (2) Messenger 2.0 inbox (teacher messages, district announcements with newMessage/actionRequired flags), and (3) portal userNotice announcements. Each section has its own count and items; if any source errors, that section contains an error field and the others still return normally. The `limit` arg caps the prism notifications only (the high-volume source). Note: listing inbox messages does not mark them as read in normal portal behavior, but some district configurations may update read-tracking; use ic_get_message for the full HTML body. " +
       UNTRUSTED_DESCRIPTION_SUFFIX,
     annotations: { readOnlyHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'whats-new' } satisfies MintHint },
     inputSchema: z.object({ ...listArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = listArgs.parse(rawArgs);
@@ -174,6 +176,7 @@ export function registerMessageTools(server: McpServer, client: ICClient): void 
     description: "Fetch the HTML body of an inbox message and return it parsed into { subject, date, body, url }. Takes a `messageUrl` which is the `url` field from an item returned by ic_list_messages' inbox section (e.g. 'portal/messageView.xsl?x=messenger.MessengerEngine-getMessageRecipientView&messageID=...'). Relative and /campus/-prefixed URLs are both accepted. Fetching the body may mark the message as read in the portal (as opening it there does), so this is not a pure read. " +
       UNTRUSTED_DESCRIPTION_SUFFIX,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    _meta: { mint: { domain: 'school', intent: 'lookup' } satisfies MintHint },
     inputSchema: z.object({ ...getArgs.shape, view: viewArg() }),
   }, async (rawArgs) => {
     const args = getArgs.parse(rawArgs);
