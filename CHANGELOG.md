@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.3...v3.3.0) (2026-11-04)
+
+
+### Features
+
+* context-group hints, a student label argument and a brief assignments view ([#275](https://github.com/chrischall/infinitecampus-mcp/issues/275)) ([cab18d9](https://github.com/chrischall/infinitecampus-mcp/commit/cab18d977b6501b86b87b89378848faf38a63295))
+
 ## [3.2.3](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.2...v3.2.3) (2026-11-03)
 
 
