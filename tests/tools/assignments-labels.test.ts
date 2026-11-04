@@ -7,7 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { createTestHarness } from '@chrischall/mcp-utils/test';
 import { ICClient } from '../../src/client.js';
-import { buildStudentLabels, registerAssignmentTools } from '../../src/tools/assignments.js';
+import { assignmentToolsRegistrar, buildStudentLabels, registerAssignmentTools } from '../../src/tools/assignments.js';
 
 const account = { name: 'anoka', baseUrl: 'https://anoka.infinitecampus.org', district: 'anoka', username: 'u', password: 'p' };
 
@@ -210,5 +210,29 @@ describe('ic_list_assignments view: brief', () => {
     const handler = capture(mockClient(), null);
     const result = await handler({ district: 'anoka', studentId: '111' });
     expect(JSON.parse(result.content[0].text)).toEqual(ASSIGNMENTS);
+  });
+});
+
+describe('assignmentToolsRegistrar', () => {
+  // runMcp calls every registrar once per served INSTANCE, and a client that
+  // probes server/discover before initialize gets two. The roster must still
+  // be read once per district, not once per instance.
+  it('reads each roster once however many instances it registers on', async () => {
+    const client = mockClient();
+    const registrar = assignmentToolsRegistrar(buildStudentLabels(client));
+    const first = await createTestHarness((server: McpServer) => registrar(server, client));
+    const second = await createTestHarness((server: McpServer) => registrar(server, client));
+    try {
+      for (const harness of [first, second]) {
+        const { tools } = await harness.client.listTools();
+        const props = tools[0].inputSchema.properties as Record<string, { enum?: string[] }>;
+        expect(props.student.enum).toEqual(['Alex Doe (anoka)', 'Sam Doe (anoka)', 'Riley Roe (wayzata)']);
+      }
+      const rosterCalls = vi.mocked(client.request).mock.calls.filter(([, path]) => path === '/campus/api/portal/students');
+      expect(rosterCalls.map(([district]) => district)).toEqual(['anoka', 'wayzata']);
+    } finally {
+      await first.close();
+      await second.close();
+    }
   });
 });

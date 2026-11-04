@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { IC_VIEWS, viewResponse } from '../view.js';
 import { z } from 'zod';
 import { IsoDate, McpToolError, rawTextResult } from '@chrischall/mcp-utils';
+import type { ToolRegistrar } from '@chrischall/mcp-utils';
 import type { ICClient } from '../client.js';
 import type { RawStudent } from './_shared.js';
 import type { MintHint } from '../mint.js';
@@ -133,7 +134,8 @@ function briefLine(a: RawAssignment): string {
 }
 
 /**
- * `labels` is built once at start (`buildStudentLabels`, from index.ts); when
+ * `labels` is built once at start (`buildStudentLabels`, from index.ts, via
+ * `assignmentToolsRegistrar`); when
  * it is absent the `student` property is still advertised, without an enum,
  * and a label is resolved at call time.
  */
@@ -208,4 +210,17 @@ export function registerAssignmentTools(
     }
     return viewResponse(view, data);
   });
+}
+
+/**
+ * The registrar for index.ts's tool list. runMcp calls every registrar once per
+ * served INSTANCE — a client that probes `server/discover` and then falls back
+ * to `initialize` gets two — so the label build must not live inside it. The
+ * caller starts `buildStudentLabels` ONCE, before runMcp, and every instance
+ * awaits that same promise: one roster read per district per process.
+ */
+export function assignmentToolsRegistrar(
+  labels: Promise<StudentLabels | null>,
+): ToolRegistrar<ICClient> {
+  return async (server, client) => registerAssignmentTools(server, client, await labels);
 }
