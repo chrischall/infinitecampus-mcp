@@ -209,6 +209,21 @@ describe('ic_list_assignments view: brief', () => {
 
   const withAssignments = (assignments: unknown) => mockClient({ assignments });
 
+  it('an assignment with no usable name is titled "Assignment"', async () => {
+    const handler = capture(
+      withAssignments([
+        { assignmentName: '   ', courseName: 'Math', sectionID: 1, missing: false },
+        { courseName: 'Math', sectionID: 1, dueDate: '2026-01-15T04:59:00.000Z', missing: true },
+      ]),
+      null,
+    );
+    const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
+    expect(briefLines(result.content[0].text)).toEqual([
+      'Assignment — no date — ok',
+      'Assignment — due 2026-01-15T04:59:00.000Z — missing',
+    ]);
+  });
+
   it('answers one line per assignment, title — due date | no date — missing|ok, inside the envelope', async () => {
     const handler = capture(mockClient(), null);
     const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
