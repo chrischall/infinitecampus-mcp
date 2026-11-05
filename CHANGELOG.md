@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.3.0...v3.3.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **brief:** an empty assignment list is a note, not an item, and brief lines ride the untrusted envelope ([#277](https://github.com/chrischall/infinitecampus-mcp/issues/277)) ([3e5cafd](https://github.com/chrischall/infinitecampus-mcp/commit/3e5cafdd65140009fa51451b2eb8738444cd2c21))
+
 ## [3.3.0](https://github.com/chrischall/infinitecampus-mcp/compare/v3.2.3...v3.3.0) (2026-11-04)
 
 
