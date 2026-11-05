@@ -1,4 +1,13 @@
-import { minifiedResult, resolveView, stripMediaUrls, viewParam, type View } from '@chrischall/mcp-utils';
+import {
+  UNTRUSTED_CONTENT_RULE,
+  minifiedResult,
+  resolveView,
+  stripMediaUrls,
+  untrustedEnvelope,
+  viewParam,
+  type View,
+} from '@chrischall/mcp-utils';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 
 /**
  * The rungs this server honours (`@chrischall/mcp-utils`' `view` vocabulary;
@@ -39,4 +48,48 @@ export const viewArg = (): ReturnType<typeof viewParam> => viewParam(IC_VIEWS, {
 export function viewResponse(view: string | undefined, data: unknown): ReturnType<typeof minifiedResult> {
   const rung: View = resolveView(view, IC_VIEWS);
   return minifiedResult(rung === 'compact' ? stripMediaUrls(data) : data);
+}
+
+// ---------------------------------------------------------------------------
+// The fleet brief-view contract (`view: "brief"`).
+//
+// One line per item, at most 120 characters, `title — <ISO date | no date> —
+// <status>`. A line starting with `-- ` is a NOTE, not an item (`-- none`,
+// `-- N of M shown`, `-- error: …`); a host composing a group answer
+// (mcp-host's intent tools) drops notes from the item count and strips one
+// leading backslash from every item line after the note check.
+
+const BRIEF_MAX = 120;
+/** The shortest a title is cut to before the date and status give way too. */
+const TITLE_FLOOR = 24;
+
+const cut = (s: string, n: number): string => (s.length > n ? `${s.slice(0, Math.max(n - 1, 0))}…` : s);
+
+/**
+ * A brief line, `title — date — status`, cut to at most 120 characters as a
+ * WHOLE, title first: the title shortens until the line fits, and only once it
+ * is at its floor does the tail give way. A title starting with `-- ` or `\`
+ * is escaped with one leading `\`, so third-party text can never read as a
+ * note.
+ */
+export function briefLine(rawTitle: string, date: string, status: string): string {
+  const title = rawTitle.startsWith('-- ') || rawTitle.startsWith('\\') ? `\\${rawTitle}` : rawTitle;
+  const tail = ` — ${date} — ${status}`;
+  if (title.length + tail.length <= BRIEF_MAX) return `${title}${tail}`;
+  const shown = cut(title, Math.max(BRIEF_MAX - tail.length, Math.min(title.length, TITLE_FLOOR)));
+  return cut(`${shown}${tail}`, BRIEF_MAX);
+}
+
+/** The brief answer when nothing matched: a note, never an item. */
+export const BRIEF_NONE = '-- none';
+
+/**
+ * Answer a `view: "brief"` read whose lines carry third-party text: the lines
+ * as the untrusted-data envelope's `data` array —
+ * `{ untrusted_content: true, note, data: string[] }`, minified — so the marker
+ * precedes the text wherever the result is read.
+ */
+export function untrustedBriefResponse(lines: string[], whoWrote: string): CallToolResult {
+  const payload = untrustedEnvelope(lines, { note: `${whoWrote} ${UNTRUSTED_CONTENT_RULE}` });
+  return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
 }

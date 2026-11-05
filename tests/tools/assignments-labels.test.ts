@@ -25,7 +25,7 @@ const ASSIGNMENTS = [
   { assignmentName: 'NoDate', courseName: 'Eng', sectionID: 3, missing: false },
 ];
 
-function mockClient(opts: { studentsFail?: string; discoveryFail?: boolean; hang?: boolean } = {}) {
+function mockClient(opts: { studentsFail?: string; discoveryFail?: boolean; hang?: boolean; assignments?: unknown } = {}) {
   const client = new ICClient(account);
   vi.spyOn(client, 'ensureDiscovery').mockImplementation(async () => {
     if (opts.discoveryFail) throw new Error('CUPS down');
@@ -40,7 +40,7 @@ function mockClient(opts: { studentsFail?: string; discoveryFail?: boolean; hang
       if (opts.studentsFail === district) throw new Error('IC 500 boom');
       return STUDENTS[district] ?? [];
     }
-    return ASSIGNMENTS;
+    return opts.assignments ?? ASSIGNMENTS;
   });
   return client;
 }
@@ -197,28 +197,91 @@ describe('ic_list_assignments student argument', () => {
 });
 
 describe('ic_list_assignments view: brief', () => {
-  it('answers one line per assignment: name, due date (or "no date"), missing|ok', async () => {
+  /** The brief answer is the untrusted-data envelope, minified, marker first; its data are the lines. */
+  function briefLines(text: string): string[] {
+    expect(text.startsWith('{"untrusted_content":true,"note":')).toBe(true);
+    const out = JSON.parse(text) as { untrusted_content: boolean; note: string; data: unknown };
+    expect(out.untrusted_content).toBe(true);
+    expect(out.note).toContain('written by teachers');
+    expect(Array.isArray(out.data)).toBe(true);
+    return out.data as string[];
+  }
+
+  const withAssignments = (assignments: unknown) => mockClient({ assignments });
+
+  it('an assignment with no usable name is titled "Assignment"', async () => {
+    const handler = capture(
+      withAssignments([
+        { assignmentName: '   ', courseName: 'Math', sectionID: 1, missing: false },
+        { courseName: 'Math', sectionID: 1, dueDate: '2026-01-15T04:59:00.000Z', missing: true },
+      ]),
+      null,
+    );
+    const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
+    expect(briefLines(result.content[0].text)).toEqual([
+      'Assignment — no date — ok',
+      'Assignment — due 2026-01-15T04:59:00.000Z — missing',
+    ]);
+  });
+
+  it('answers one line per assignment, title — due date | no date — missing|ok, inside the envelope', async () => {
     const handler = capture(mockClient(), null);
     const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
-    expect(result.content[0].text).toBe(
-      [
-        'HW1 — due 2026-01-15T04:59:00.000Z — ok',
-        'Lab — due 2026-03-20T04:59:00.000Z — missing',
-        'NoDate — due no date — ok',
-      ].join('\n'),
-    );
+    expect(briefLines(result.content[0].text)).toEqual([
+      'HW1 — due 2026-01-15T04:59:00.000Z — ok',
+      'Lab — due 2026-03-20T04:59:00.000Z — missing',
+      'NoDate — no date — ok',
+    ]);
   });
 
   it('applies the filters before rendering', async () => {
     const handler = capture(mockClient(), null);
     const result = await handler({ district: 'anoka', studentId: '111', view: 'brief', missingOnly: true });
-    expect(result.content[0].text).toBe('Lab — due 2026-03-20T04:59:00.000Z — missing');
+    expect(briefLines(result.content[0].text)).toEqual(['Lab — due 2026-03-20T04:59:00.000Z — missing']);
   });
 
-  it('says so when nothing matches', async () => {
+  it('an empty answer is exactly the note line -- none, never an item', async () => {
     const handler = capture(mockClient(), null);
     const result = await handler({ district: 'anoka', studentId: '111', view: 'brief', since: '2030-01-01' });
-    expect(result.content[0].text).toBe('No assignments.');
+    expect(briefLines(result.content[0].text)).toEqual(['-- none']);
+  });
+
+  it('escapes a title that starts with "-- " or "\\" with one leading backslash', async () => {
+    const handler = capture(
+      withAssignments([
+        { assignmentName: '-- none', courseName: 'Math', sectionID: 1, missing: false },
+        { assignmentName: '\\slash', courseName: 'Math', sectionID: 1, missing: true },
+        { assignmentName: '--tight', courseName: 'Math', sectionID: 1, missing: false },
+      ]),
+      null,
+    );
+    const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
+    expect(briefLines(result.content[0].text)).toEqual([
+      '\\-- none — no date — ok',
+      '\\\\slash — no date — missing',
+      '--tight — no date — ok',
+    ]);
+  });
+
+  it('cuts a long line to at most 120 characters as a whole, title first', async () => {
+    const handler = capture(
+      withAssignments([
+        { assignmentName: 'x'.repeat(300), courseName: 'Math', sectionID: 1, dueDate: '2026-01-15T04:59:00.000Z', missing: true },
+      ]),
+      null,
+    );
+    const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
+    const [line] = briefLines(result.content[0].text);
+    expect(line.length).toBeLessThanOrEqual(120);
+    expect(line).toMatch(/^x+… — due 2026-01-15T04:59:00\.000Z — missing$/);
+  });
+
+  it('a payload that is not a list is an -- error note, not a crash or an item', async () => {
+    const handler = capture(withAssignments({ odd: true }), null);
+    const result = await handler({ district: 'anoka', studentId: '111', view: 'brief' });
+    const lines = briefLines(result.content[0].text);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^-- error: .+/);
   });
 
   it('leaves the default view unchanged', async () => {

@@ -111,7 +111,7 @@ e.g. `2635.16`) — quote it in any bug report about an endpoint that changed. M
 | Tool | Notes |
 |------|-------|
 | `ic_get_schedule(district, studentId, view?)` | Full class roster with section placements, across every term — not filtered by date or term. |
-| `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?, view?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. |
+| `ic_list_assignments(district, studentId, courseId?, since?, until?, missingOnly?, view?)` | `sectionID` is the only server-side filter; `since`/`until`/`missingOnly` are applied client-side. Pass `missingOnly=true` to see only missing/late work across all courses. `view="brief"` answers `{untrusted_content, note, data: [lines]}` with one `<name> — due <date> | no date — <missing|ok>` line per assignment; a `-- ` line is a note (`-- none` = nothing matched), not an assignment. |
 | `ic_list_grades(district, studentId, termId?, view?)` | Term + in-progress grade summary. Omit `termId` for all terms. |
 | `ic_list_recent_grades(district, studentId, since?, view?)` | Recently-scored assignments. Defaults to a 14-day window; pass `since` (YYYY-MM-DD) to widen. |
 | `ic_list_assessments(district, studentId, view?)` | Standardized test scores (state/national/district tests). FeatureDisabled-aware. |
