@@ -15,7 +15,7 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 | Districts | `ic_list_districts` |
 | Students | `ic_list_students` |
 | Schedule | `ic_get_schedule` |
-| Assignments | `ic_list_assignments` (sectionID server-side; `missingOnly` / date filters client-side; name the student as `student: "<name> (<district>)"` or with `district` + `studentId`; `view: "brief"` answers one line per assignment) |
+| Assignments | `ic_list_assignments` (sectionID server-side; `missingOnly` / date filters client-side; name the student as `student: "<name> (<district>)"` or with `district` + `studentId`; `view: "brief"` answers one line per assignment inside the untrusted-data envelope, `-- none` when nothing matches) |
 | Grades | `ic_list_grades`, `ic_list_recent_grades` (default 14d window) |
 | School calendar | `ic_list_school_days` |
 | Attendance | `ic_list_attendance` (per-course summary), `ic_list_attendance_events` (individual events with codes + comments) |

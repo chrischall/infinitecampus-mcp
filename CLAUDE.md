@@ -26,8 +26,14 @@ from `@chrischall/mcp-utils`. **All 18 read tools** (`readOnlyHint: true`) take
 `view` and answer through `viewResponse`; `ic_download_document` does not — it is
 a write (`destructiveHint`) whose response is a receipt with nothing to strip.
 `ic_list_assignments` alone also honours `brief` (its own enum, not `IC_VIEWS`):
-one text line per assignment, `<assignmentName> — due <dueDate or no date> —
-<missing|ok>`, built only from fields this repo already reads.
+one line per assignment, `<assignmentName> — due <dueDate> | no date —
+<missing|ok>`, built only from fields this repo already reads, cut to ≤ 120
+chars title-first (`briefLine` in `src/view.ts`). Names are teacher-written,
+so the lines ride in the untrusted-data envelope as `data: string[]`
+(`untrustedBriefResponse`). A line starting with `-- ` is a note, not an item:
+nothing matched is exactly `["-- none"]`, an unreadable payload is
+`-- error: …`, and a name that itself starts with `-- ` or `\` gets one
+leading `\`.
 
 ## Context-group hints (`_meta.mint`)
 
