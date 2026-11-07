@@ -659,6 +659,21 @@ export class ICClient {
     if (destStat?.isDirectory()) throw new InvalidPathError(destinationPath);
     if (destStat && !opts.overwrite) throw new FileExistsError(destinationPath);
 
+    const doc = await this.fetchDocument(district, path);
+    await writeConfined(target.real, destinationPath, doc.bytes, !!opts.overwrite);
+    return { path: target.requested, bytes: doc.bytes.byteLength, contentType: doc.contentType };
+  }
+
+  /**
+   * Fetch a document into memory — the network half of {@link download}, for
+   * callers that hand the bytes back some other way (a signed link when
+   * hosted, inline content). Same origin fence, session replay, timeout and
+   * {@link MAX_DOWNLOAD_BYTES} cap as download(); writes nothing.
+   * `fileName` is the basename from a Content-Disposition header, if any.
+   */
+  async fetchDocument(
+    district: string, path: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string; fileName?: string }> {
     const account = await this.resolveAccount(district);
     const url = documentUrl(account, path);
 
@@ -688,12 +703,12 @@ export class ICClient {
     if (res.status === 401) throw new SessionExpiredError(account.name);
     if (!res.ok) throw new Error(`IC download ${res.status} for ${path}`);
 
-    const buf = await readCapped(res, path);
-    await writeConfined(target.real, destinationPath, buf, !!opts.overwrite);
+    const bytes = await readCapped(res, path);
+    const fileName = dispositionFileName(res.headers.get('content-disposition'));
     return {
-      path: target.requested,
-      bytes: buf.byteLength,
+      bytes,
       contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+      ...(fileName ? { fileName } : {}),
     };
   }
 
@@ -741,6 +756,24 @@ export class ICClient {
     }
     return (text ? JSON.parse(text) : null) as T;
   }
+}
+
+/**
+ * The file name a Content-Disposition header suggests, reduced to a basename
+ * (it is server-supplied, so `../` must not survive into a saved name), or
+ * undefined when there is none worth using. `filename*` (RFC 5987) wins.
+ */
+function dispositionFileName(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const star = /filename\*\s*=\s*[^']*'[^']*'([^;]+)/i.exec(header);
+  let raw: string | undefined;
+  if (star) {
+    try { raw = decodeURIComponent(star[1].trim()); } catch { raw = star[1].trim(); }
+  } else {
+    raw = /filename\s*=\s*"?([^";]+)"?/i.exec(header)?.[1];
+  }
+  const name = raw ? basename(raw.trim().replace(/\\/g, '/')) : '';
+  return name && name !== '.' && name !== '..' ? name : undefined;
 }
 
 /**
