@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.3.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.3.1...v3.3.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** upgrade @chrischall/mcp-utils to 3.7.2 so uploads carry only the file's bytes ([#282](https://github.com/chrischall/infinitecampus-mcp/issues/282)) ([1a8ada9](https://github.com/chrischall/infinitecampus-mcp/commit/1a8ada9d77112cc7369a86865cb0dbabd3e668d8))
+* **documents:** return a download link for ic_download_document on hosted servers ([#280](https://github.com/chrischall/infinitecampus-mcp/issues/280)) ([493869a](https://github.com/chrischall/infinitecampus-mcp/commit/493869ac9681fa1feab8cb1c5c6752149ffc35f4))
+
 ## [3.3.1](https://github.com/chrischall/infinitecampus-mcp/compare/v3.3.0...v3.3.1) (2026-11-05)
 
 
