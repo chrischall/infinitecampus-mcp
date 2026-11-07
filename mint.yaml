@@ -60,8 +60,9 @@ env:
   - name: IC_DOWNLOAD_DIR
     required: false
     help: >-
-      Absolute path of the only directory ic_download_document may write into.
-      Defaults to ~/Downloads, which must exist.
+      Local installs only: absolute path of the only directory
+      ic_download_document may write into. Defaults to ~/Downloads, which must
+      exist. A hosted server writes no files — it returns a download link.
 state:
   dataDir: true
   reason: >-

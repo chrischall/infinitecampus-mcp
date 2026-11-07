@@ -30,6 +30,8 @@ MCP server for Infinite Campus (Campus Parent portal). Single-account config —
 
 Tools that the harness will gate as write/IO operations: `ic_download_document`.
 
+`ic_download_document` hands the document back by whichever route reaches you: on a **hosted** server (mcp-host) it returns a signed, expiring download link and writes nothing to the server's disk; on a **local** install it writes to `destinationPath` inside `IC_DOWNLOAD_DIR` (default `~/Downloads`), as before. `inline: true` returns the file in the result instead (up to 10 MiB). Downloads are capped at 50 MB and time out after 2 minutes.
+
 ### Context-group hints
 
 Every tool carries a `_meta.mint` hint (domain `school`) that [mcp-host](https://github.com/chrischall/mcp-host) reads to group tools by what they answer. `ic_list_assignments` is the canonical *what's due* tool: its hint names `student` as the subject and `since`/`until` as the date range. At start the server builds the `student` labels — `"<name> (<district>)"` for every student in every linked district — and advertises them as an enum; if that fails or takes longer than 8 seconds, the argument is still advertised without an enum and a label is resolved when the tool is called.
@@ -53,6 +55,16 @@ Set `IC_DISABLE_FETCHPROXY=1` to opt out of the fallback (turns missing credenti
 Linked districts (via CUPS SSO) are auto-discovered after primary login — a parent with kids in two districts only configures the primary. No extra config needed. If you have truly separate IC instances with different credentials, run two MCP instances.
 
 See `.env.example`.
+
+## Upgrading
+
+### next release — `ic_download_document` on hosted servers
+
+- `destinationPath` is now **optional**. A local install still requires it unless `inline: true` (the call is refused before anything is fetched); a hosted server ignores everything but its file name.
+- New optional `inline` (boolean).
+- On a local install without `inline`, the result is unchanged: `{ path, bytes, contentType }`.
+- On a hosted server, or with `inline: true`, the result is a different receipt — `{ via, fileName, bytes, contentType, downloadUrl?, downloadExpiresAt?, note? }` — with no `path` (there is no file a caller could open). `via` is `link` (use `downloadUrl` before `downloadExpiresAt`) or `resource` (the file is an embedded-resource content block ahead of the receipt). `contentType` here is the bare media type, without `;charset=…` parameters.
+- A hosted server with no blob store, given a document over 10 MiB, refuses with a `too_large` error instead of writing to the runner's disk.
 
 ## Status
 

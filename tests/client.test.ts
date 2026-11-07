@@ -754,6 +754,80 @@ describe('ICClient.getFeatures', () => {
   });
 });
 
+describe('ICClient.fetchDocument', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  function loginThenDoc(res: Response) {
+    return vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'set-cookie': 'JSESSIONID=b' } }))
+      .mockResolvedValueOnce(noLinkedAccounts())
+      .mockResolvedValueOnce(res);
+  }
+
+  it('returns the bytes and content type in memory, writing nothing', async () => {
+    const fetchSpy = loginThenDoc(new Response(new Uint8Array([1, 2, 3]), {
+      status: 200, headers: { 'content-type': 'application/pdf' },
+    }));
+    const doc = await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc');
+    expect(Array.from(doc.bytes)).toEqual([1, 2, 3]);
+    expect(doc.contentType).toBe('application/pdf');
+    expect(doc.fileName).toBeUndefined();
+    expect(String(fetchSpy.mock.calls[2][0])).toBe('https://anoka.infinitecampus.org/campus/doc');
+  });
+
+  it('reads the server-suggested file name from content-disposition, reduced to a basename', async () => {
+    loginThenDoc(new Response(new Uint8Array([1]), {
+      status: 200, headers: { 'content-disposition': 'attachment; filename="../sub/Report Card.pdf"' },
+    }));
+    const doc = await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc');
+    expect(doc.fileName).toBe('Report Card.pdf');
+    expect(doc.contentType).toBe('application/octet-stream');
+  });
+
+  it('reads an unquoted / RFC 5987 file name', async () => {
+    loginThenDoc(new Response(new Uint8Array([1]), {
+      status: 200, headers: { 'content-disposition': "inline; filename*=UTF-8''report%20card.pdf" },
+    }));
+    expect((await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).fileName).toBe('report card.pdf');
+  });
+
+  it('ignores a content-disposition with no usable name', async () => {
+    loginThenDoc(new Response(new Uint8Array([1]), {
+      status: 200, headers: { 'content-disposition': 'attachment; filename=".."' },
+    }));
+    expect((await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).fileName).toBeUndefined();
+  });
+
+  it('ignores a bare disposition, and strips a Windows-style directory', async () => {
+    loginThenDoc(new Response(new Uint8Array([1]), { status: 200, headers: { 'content-disposition': 'inline' } }));
+    expect((await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).fileName).toBeUndefined();
+    vi.restoreAllMocks();
+    loginThenDoc(new Response(new Uint8Array([1]), {
+      status: 200, headers: { 'content-disposition': 'attachment; filename=C:\\tmp\\card.pdf' },
+    }));
+    expect((await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).fileName).toBe('card.pdf');
+  });
+
+  it('keeps a malformed percent-encoding verbatim rather than throwing', async () => {
+    loginThenDoc(new Response(new Uint8Array([1]), {
+      status: 200, headers: { 'content-disposition': "attachment; filename*=UTF-8''bad%E0.pdf" },
+    }));
+    expect((await new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).fileName).toBe('bad%E0.pdf');
+  });
+
+  it('refuses an off-origin documentId before any request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await expect(new ICClient(primaryAccount).fetchDocument('anoka', 'https://evil.example/x'))
+      .rejects.toThrow(/DocumentOriginNotAllowed/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws IC download <status> on a non-ok response', async () => {
+    loginThenDoc(new Response('nope', { status: 404 }));
+    await expect(new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc')).rejects.toThrow(/IC download 404/);
+  });
+});
+
 describe('ICClient.download', () => {
   let dir: string;
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ic-test-')); });
@@ -2546,6 +2620,14 @@ describe('ICClient — timeouts, cancellation and download cap', () => {
         .rejects.toThrow(/exceeds/);
       await expect(stat(dest)).rejects.toThrow();
       expect(pulled).toBeLessThanOrEqual(MAX_DOWNLOAD_BYTES / chunk.byteLength + 3);
+    });
+
+    it('fetchDocument applies the same cap without touching disk', async () => {
+      loginThen(() => new Response(new Uint8Array([1]), {
+        status: 200, headers: { 'content-length': String(MAX_DOWNLOAD_BYTES + 1) },
+      }));
+      await expect(new ICClient(primaryAccount).fetchDocument('anoka', '/campus/doc'))
+        .rejects.toBeInstanceOf(DownloadTooLargeError);
     });
 
     it('writes an empty file for a body-less 200', async () => {

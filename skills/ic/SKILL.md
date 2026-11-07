@@ -131,7 +131,7 @@ e.g. `2635.16`) — quote it in any bug report about an endpoint that changed. M
 | Tool | Notes |
 |------|-------|
 | `ic_list_documents(district, studentId, view?)` | Metadata only (report cards, schedules, transcripts). Pass an item's `url` to `ic_download_document` as `documentId`. Returns `FeatureDisabled` if the documents module is off. |
-| `ic_download_document(district, documentId, destinationPath, overwrite?)` | Writes the document to `destinationPath`, which must be inside the download directory (`IC_DOWNLOAD_DIR`, default `~/Downloads`; relative paths resolve against it). **`destinationPath` is required** — confirm the path with the user before calling. |
+| `ic_download_document(district, documentId, destinationPath?, overwrite?, inline?)` | Hosted server: returns a signed, expiring `downloadUrl` (give it only to the user) and writes nothing to disk; `destinationPath`'s file name, if given, names the file. Local install: writes to `destinationPath` inside the download directory (`IC_DOWNLOAD_DIR`, default `~/Downloads`; relative paths resolve against it) — required there unless `inline: true`; confirm the path with the user. `inline: true` returns the file in the result (up to 10 MiB). |
 
 ### Messaging
 | Tool | Notes |
@@ -183,7 +183,7 @@ other shape.
 
 Two tools take no `view`, both because there is nothing to project:
 
-- **`ic_download_document`** writes a PDF to disk and returns a receipt. Its
+- **`ic_download_document`** hands back a PDF (a link, a saved file, or inline) and a receipt. Its
   product IS the document — media-stripping a tool that exists to hand you a
   file would not shrink the answer, it would empty it.
 - **`ic_healthcheck`** takes no arguments at all. Its answer is a fixed
@@ -218,11 +218,11 @@ Two tools take no `view`, both because there is nothing to project:
 
 **Download a report card:**
 1. `ic_list_documents(district, studentId)` → find the report card's `url` (passed as `documentId`)
-2. Confirm destination path with the user
-3. `ic_download_document(district, documentId, destinationPath="report-card.pdf")` — a relative path lands in the download directory
+2. Hosted: `ic_download_document(district, documentId, destinationPath="report-card.pdf")` → share the `downloadUrl` with the user (it expires at `downloadExpiresAt`)
+3. Local: confirm the destination path with the user, then the same call — a relative path lands in the download directory
 
 ## Caution
 
-- `ic_download_document` writes to disk at `destinationPath`, only inside the download directory, and refuses to replace an existing file unless `overwrite: true` — confirm the path with the user.
+- `ic_download_document` on a local install writes to disk at `destinationPath`, only inside the download directory, and refuses to replace an existing file unless `overwrite: true` — confirm the path with the user. On a hosted server it writes nothing to disk and returns a link instead; the link works for anyone holding it until it expires, so give it only to the user.
 - `ic_get_message` is not annotated read-only: fetching a message's body may mark it as read in the portal, as opening it there does (not yet confirmed against a live unread message). Use it only when the user asks to open a message; summarize the inbox from `ic_list_messages`.
 - Endpoint behavior varies by district. If `ic_list_behavior`, `ic_list_food_service`, `ic_list_documents`, `ic_list_assessments`, or `ic_list_fees` returns a `FeatureDisabled` warning, that module is simply turned off for the district — it's not an error. `ic_list_fees` may also return `PartialSuccess` when only one of its two sub-endpoints works.
