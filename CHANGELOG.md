@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.3.3](https://github.com/chrischall/infinitecampus-mcp/compare/v3.3.2...v3.3.3) (2026-11-22)
+
+
+### Bug Fixes
+
+* **deps:** bump node-html-parser from 9.0.5 to 9.0.6 in the production-dependencies group ([#284](https://github.com/chrischall/infinitecampus-mcp/issues/284)) ([5ed25fc](https://github.com/chrischall/infinitecampus-mcp/commit/5ed25fcaecea6167e9fe6593d5a0361b13f9cf86))
+* **deps:** bump the production-dependencies group with 5 updates ([#286](https://github.com/chrischall/infinitecampus-mcp/issues/286)) ([0823d71](https://github.com/chrischall/infinitecampus-mcp/commit/0823d714329e0315d900dd2b2adf2f28d795a6c4))
+
 ## [3.3.2](https://github.com/chrischall/infinitecampus-mcp/compare/v3.3.1...v3.3.2) (2026-11-07)
 
 
